@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Poshak" parent="android:Theme.Material.NoActionBar">
+        <!-- Match the launch window to dark mode before the first Compose frame. -->
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
