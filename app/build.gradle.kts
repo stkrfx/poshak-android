@@ -106,5 +106,4 @@ dependencies {
     // JSON DTO support already configured by the project
     implementation(libs.kotlinx.serialization.core)
 
-    implementation("androidx.compose.material3:material3:1.5.0-beta02")
 }
