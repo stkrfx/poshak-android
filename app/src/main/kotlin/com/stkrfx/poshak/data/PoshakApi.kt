@@ -76,6 +76,14 @@ class PoshakApi(context: Context) {
         }
     }
 
+    /** Fetches the latest account profile without changing the current navigation state. */
+    suspend fun fetchProfile(): EmployeeProfile = withContext(Dispatchers.IO) {
+        val response = authenticatedRequest("GET", "/api/v1/profile")
+        val data = response.optJSONObject("data")
+            ?: throw ApiException(500, "INVALID_RESPONSE", "The server returned an incomplete profile response.")
+        profileFrom(data)
+    }
+
     suspend fun fetchAttendance(): AttendanceSnapshot = withContext(Dispatchers.IO) {
         val response = authenticatedRequest("GET", "/api/v1/attendance")
         val data = response.optJSONObject("data")

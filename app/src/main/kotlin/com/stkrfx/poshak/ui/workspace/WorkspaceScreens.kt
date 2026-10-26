@@ -137,17 +137,19 @@ fun AuthenticatedWorkspace(
     val context = LocalContext.current
     val localPreferences = remember { context.getSharedPreferences("poshak_local_data", android.content.Context.MODE_PRIVATE) }
     val localVault = remember { com.stkrfx.poshak.data.LocalDeviceVault(context) }
+    var latestProfile by remember { mutableStateOf(profile) }
+    var profileRefreshing by rememberSaveable { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.OVERVIEW) }
     var showSwitchOrLogout by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
-    var showBlockedDialog by remember { mutableStateOf(profile.isBlocked) }
-    var profileName by rememberSaveable { mutableStateOf(profile.name) }
-    var username by rememberSaveable { mutableStateOf(localPreferences.getString("profile_username", profile.username) ?: profile.username) }
-    var email by rememberSaveable { mutableStateOf(localPreferences.getString("profile_email", profile.email.orEmpty()) ?: profile.email.orEmpty()) }
-    var address by rememberSaveable { mutableStateOf(localPreferences.getString("profile_address", profile.address.orEmpty()) ?: profile.address.orEmpty()) }
-    var dob by rememberSaveable { mutableStateOf(localPreferences.getString("profile_dob", profile.dateOfBirth.orEmpty()) ?: profile.dateOfBirth.orEmpty()) }
-    var avatar by rememberSaveable { mutableStateOf(localPreferences.getString("profile_avatar", profile.avatarUrl.orEmpty()) ?: profile.avatarUrl.orEmpty()) }
+    var showBlockedDialog by remember { mutableStateOf(latestProfile.isBlocked) }
+    var profileName by rememberSaveable { mutableStateOf(latestProfile.name) }
+    var username by rememberSaveable { mutableStateOf(localPreferences.getString("profile_username", latestProfile.username) ?: latestProfile.username) }
+    var email by rememberSaveable { mutableStateOf(localPreferences.getString("profile_email", latestProfile.email.orEmpty()) ?: latestProfile.email.orEmpty()) }
+    var address by rememberSaveable { mutableStateOf(localPreferences.getString("profile_address", latestProfile.address.orEmpty()) ?: latestProfile.address.orEmpty()) }
+    var dob by rememberSaveable { mutableStateOf(localPreferences.getString("profile_dob", latestProfile.dateOfBirth.orEmpty()) ?: latestProfile.dateOfBirth.orEmpty()) }
+    var avatar by rememberSaveable { mutableStateOf(localPreferences.getString("profile_avatar", latestProfile.avatarUrl.orEmpty()) ?: latestProfile.avatarUrl.orEmpty()) }
     var emailPending by rememberSaveable { mutableStateOf("") }
     var profileError by rememberSaveable { mutableStateOf<String?>(null) }
     var profileSaved by rememberSaveable { mutableStateOf(false) }
@@ -159,7 +161,7 @@ fun AuthenticatedWorkspace(
     var showConfirmPassword by rememberSaveable { mutableStateOf(false) }
     var appLock by rememberSaveable { mutableStateOf(localPreferences.getString("app_lock", "DEVICE") ?: "DEVICE") }
     var weekStartsMonday by rememberSaveable { mutableStateOf(localPreferences.getBoolean("week_starts_monday", true)) }
-    var dobLocked by rememberSaveable { mutableStateOf(localPreferences.getBoolean("dob_locked", profile.isDateOfBirthLocked)) }
+    var dobLocked by rememberSaveable { mutableStateOf(localPreferences.getBoolean("dob_locked", latestProfile.isDateOfBirthLocked)) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showAvatarActions by remember { mutableStateOf(false) }
     var showDeviceOtp by remember { mutableStateOf(false) }
@@ -168,6 +170,9 @@ fun AuthenticatedWorkspace(
     var pin by rememberSaveable { mutableStateOf("") }
     var confirmPin by rememberSaveable { mutableStateOf("") }
     var appPin by rememberSaveable { mutableStateOf(localVault.getString("app_pin").orEmpty()) }
+    var showAppUnlock by rememberSaveable { mutableStateOf(localVault.getString("app_pin").orEmpty().isNotBlank() && localPreferences.getBoolean("app_lock_enabled", true)) }
+    var unlockAttempt by rememberSaveable { mutableStateOf("") }
+    var unlockError by rememberSaveable { mutableStateOf<String?>(null) }
     var salarySecretPin by rememberSaveable { mutableStateOf(localVault.getString("salary_pin").orEmpty()) }
     var salaryPin by rememberSaveable { mutableStateOf("") }
     var salary by rememberSaveable { mutableStateOf(localPreferences.getString("monthly_salary", "").orEmpty()) }
@@ -185,7 +190,7 @@ fun AuthenticatedWorkspace(
             LocalNotice("Welcome to Poshak", "Your attendance and documents will appear here.", "Earlier", false),
         )
     }
-    val accounts = remember { mutableStateListOf(LocalAccount(profile.name, "${profile.username} · Current account", true), LocalAccount("Add another account", "Sign in to another account")) }
+    val accounts = remember { mutableStateListOf(LocalAccount(latestProfile.name, "${latestProfile.username} · Current account", true), LocalAccount("Add another account", "Sign in to another account")) }
     val devices = remember {
         mutableStateListOf(
             LocalDevice("This device", "Android · Current session", true),
@@ -211,9 +216,33 @@ fun AuthenticatedWorkspace(
             else -> showExitConfirmation = true
         }
     }
+    androidx.compose.runtime.LaunchedEffect(selectedTab, profilePage) {
+        if (selectedTab == MainTab.PROFILE) {
+            profileRefreshing = true
+            try {
+                val fresh = api.fetchProfile()
+                latestProfile = fresh
+                profileName = fresh.name
+                username = fresh.username
+                email = fresh.email.orEmpty()
+                address = fresh.address.orEmpty()
+                dob = fresh.dateOfBirth.orEmpty()
+                avatar = fresh.avatarUrl.orEmpty()
+                dobLocked = fresh.isDateOfBirthLocked
+                showBlockedDialog = fresh.isBlocked
+            } catch (error: com.stkrfx.poshak.data.ApiException) {
+                if (error.statusCode == 401 || error.apiCode == "ACCOUNT_BLOCKED") onSessionExpired()
+            } catch (_: Exception) {
+                // Keep the existing profile visible if a background refresh fails.
+            } finally {
+                profileRefreshing = false
+            }
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(appLock, appPin, weekStartsMonday, dobLocked, salary, salarySecretPin, salaryPinConfigured, username, email, address, dob, avatar) {
         localPreferences.edit()
             .putString("app_lock", appLock)
+            .putBoolean("app_lock_enabled", appLock != "NONE")
             .putBoolean("week_starts_monday", weekStartsMonday)
             .putBoolean("dob_locked", dobLocked)
             .putString("monthly_salary", salary)
@@ -227,6 +256,31 @@ fun AuthenticatedWorkspace(
         localVault.putString("app_pin", appPin)
         localVault.putString("salary_pin", salarySecretPin)
     }
+    if (showAppUnlock) {
+        AlertDialog(
+            onDismissRequest = { },
+            icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+            title = { Text("Unlock Poshak") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Enter your four-digit app PIN to open attendance and documents.")
+                    PinCodeInput(value = unlockAttempt, onValueChange = { unlockAttempt = it; unlockError = null })
+                    unlockError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (unlockAttempt == appPin && appPin.length == 4) {
+                        showAppUnlock = false
+                        unlockAttempt = ""
+                        unlockError = null
+                    } else unlockError = "That PIN is incorrect."
+                }) { Text("Unlock") }
+            },
+            dismissButton = { TextButton(onClick = onLogout) { Text("Log out") } },
+        )
+    }
+
     if (showExitConfirmation) {
         AlertDialog(
             onDismissRequest = { showExitConfirmation = false },
@@ -242,7 +296,7 @@ fun AuthenticatedWorkspace(
             onDismissRequest = { },
             icon = { Icon(Icons.Filled.Security, contentDescription = null) },
             title = { Text("Account access restricted") },
-            text = { Text(profile.blockedReason ?: "This account has been blocked by an administrator. Contact support or switch to another account.") },
+            text = { Text(latestProfile.blockedReason ?: "This account has been blocked by an administrator. Contact support or switch to another account.") },
             confirmButton = { TextButton(onClick = { showBlockedDialog = false; openWhatsApp(context) }) { Text("Contact support") } },
             dismissButton = { TextButton(onClick = { showBlockedDialog = false; profilePage = ProfilePage.SWITCH_ACCOUNT; selectedTab = MainTab.PROFILE }) { Text("Switch account") } },
         )
@@ -370,7 +424,7 @@ fun AuthenticatedWorkspace(
             when {
                 selectedTab == MainTab.HOME -> HomeScreen(
                     api = api,
-                    profile = profile,
+                    profile = latestProfile,
                     onSessionExpired = onSessionExpired,
                     onLogout = onLogout,
                     onForceUpdate = onForceUpdate,
@@ -382,7 +436,7 @@ fun AuthenticatedWorkspace(
                 )
                 selectedTab == MainTab.DOCUMENTS -> DocumentsScreen(
                     onBack = { selectedTab = MainTab.HOME },
-                    canUpload = profile.canUploadDocuments,
+                    canUpload = latestProfile.canUploadDocuments,
                     onMessage = { scope.launch { snackbarHostState.showSnackbar(it) } },
                 )
                 selectedTab == MainTab.UPDATES -> UpdatesScreen(
@@ -400,7 +454,7 @@ fun AuthenticatedWorkspace(
                         dob = dob,
                         avatar = avatar,
                         dobLocked = dobLocked,
-                        canEdit = profile.canEditProfile,
+                        canEdit = latestProfile.canEditProfile,
                         onEdit = { profileError = null; profileSaved = false; profilePage = ProfilePage.EDIT },
                         onAvatar = { showAvatarActions = true },
                         onChangePassword = { currentPassword = ""; newPassword = ""; confirmPassword = ""; profilePage = ProfilePage.CHANGE_PASSWORD },
