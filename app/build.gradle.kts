@@ -33,7 +33,7 @@ val appVersionName = "2.0.0"
         buildConfigField("String", "API_BASE_URL", "\"${configuredApiBaseUrl.trimEnd('/')}\"")
         buildConfigField("int", "APP_VERSION_CODE", "2")
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        resConfigs "en"
+        resConfigs("en")
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
