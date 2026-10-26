@@ -8,15 +8,15 @@ val configuredApiBaseUrl = providers.gradleProperty("POSHAK_API_BASE_URL")
     .orElse(providers.environmentVariable("POSHAK_API_BASE_URL"))
     .orElse("https://poshak-attendance.onrender.com")
     .get()
-val appVersionCode = 1
-val appVersionName = "1.0.0"
+val appVersionCode = 2
+val appVersionName = "2.0.0"
 
 android {
     namespace = "com.stkrfx.poshak"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.stkrfx.poshak"
+        applicationId = "com.satyamfix.poshak"
         minSdk = 24
         targetSdk = 37
         versionCode = appVersionCode
@@ -32,6 +32,7 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             // Production builds must use HTTPS.
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = true
