@@ -148,11 +148,11 @@ fun AuthenticatedWorkspace(
     var showSwitchOrLogout by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var showBlockedDialog by remember { mutableStateOf(false) }
-    var profileName by rememberSaveable { mutableStateOf(latestProfile.name) }
-    var username by rememberSaveable { mutableStateOf(latestProfile.username) }
-    var email by rememberSaveable { mutableStateOf(latestProfile.email.orEmpty()) }
-    var address by rememberSaveable { mutableStateOf(latestProfile.address.orEmpty()) }
-    var dob by rememberSaveable { mutableStateOf(latestProfile.dateOfBirth.orEmpty()) }
+    var profileName by remember(latestProfile.id) { mutableStateOf(latestProfile.name) }
+    var username by remember(latestProfile.id) { mutableStateOf(latestProfile.username) }
+    var email by remember(latestProfile.id) { mutableStateOf(latestProfile.email.orEmpty()) }
+    var address by remember(latestProfile.id) { mutableStateOf(latestProfile.address.orEmpty()) }
+    var dob by remember(latestProfile.id) { mutableStateOf(latestProfile.dateOfBirth.orEmpty()) }
     var avatar by remember(latestProfile.id) { mutableStateOf(latestProfile.avatarUrl.orEmpty()) }
     var emailPending by rememberSaveable { mutableStateOf("") }
     var profileError by rememberSaveable { mutableStateOf<String?>(null) }
