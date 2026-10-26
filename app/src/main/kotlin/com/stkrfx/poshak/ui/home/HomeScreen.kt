@@ -2,6 +2,8 @@ package com.stkrfx.poshak.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +64,7 @@ import java.time.YearMonth
 import java.time.format.TextStyle as JavaTextStyle
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     api: PoshakApi,
@@ -70,6 +72,11 @@ fun HomeScreen(
     onSessionExpired: () -> Unit,
     onLogout: () -> Unit,
     onForceUpdate: (AppRelease) -> Unit,
+    modifier: Modifier = Modifier,
+    salaryLabel: String? = null,
+    onSalaryClick: () -> Unit = {},
+    onSalaryLongPress: () -> Unit = {},
+    weekStartsMonday: Boolean = true,
 ) {
     var snapshot by remember { mutableStateOf<AttendanceSnapshot?>(null) }
     var loading by rememberSaveable { mutableStateOf(true) }
@@ -109,6 +116,7 @@ fun HomeScreen(
     val selectedMonth = currentSnapshot?.months?.firstOrNull { it.sheetName == selectedSheetName }
 
     Scaffold(
+        modifier = modifier,
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
@@ -129,6 +137,17 @@ fun HomeScreen(
                     }
                     IconButton(onClick = { showSummary = !showSummary }) {
                         Icon(Icons.Filled.Calculate, contentDescription = "Toggle attendance summary")
+                    }
+                    if (salaryLabel == null) {
+                        TextButton(onClick = onSalaryClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("₹", style = MaterialTheme.typography.titleLarge) }
+                    } else {
+                        Text(
+                            text = salaryLabel,
+                            modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.secondaryContainer).combinedClickable(onClick = onSalaryClick, onLongClick = onSalaryLongPress).padding(horizontal = 10.dp, vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                     IconButton(onClick = { refreshKey++ }, enabled = !loading) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh attendance")
@@ -206,6 +225,7 @@ fun HomeScreen(
                         // Notes are only surfaced after the employee taps a date that contains one.
                         coroutineScope.launch { snackbarHost.showSnackbar(note) }
                     },
+                    weekStartsMonday = weekStartsMonday,
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(
@@ -236,17 +256,18 @@ private fun CalendarGrid(
     allMonths: List<AttendanceMonth>,
     onSelectMonth: (String) -> Unit,
     onShowNote: (String) -> Unit,
+    weekStartsMonday: Boolean,
 ) {
     val start = selectedMonth.yearMonth.atDay(1)
-    val mondayOffset = start.dayOfWeek.value - DayOfWeek.MONDAY.value
-    val firstCellDate = start.minusDays(mondayOffset.toLong())
+    val startOffset = if (weekStartsMonday) start.dayOfWeek.value - 1 else start.dayOfWeek.value % 7
+    val firstCellDate = start.minusDays(startOffset.toLong())
     val allowedYearMonths = allMonths.map { it.yearMonth }.toSet()
     val daysByDate = allMonths.flatMap { it.days }.associateBy { it.date }
     val today = LocalDate.now()
 
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         (0..6).forEach { index ->
-            val weekday = DayOfWeek.of(index + 1)
+            val weekday = if (weekStartsMonday) DayOfWeek.of(index + 1) else if (index == 0) DayOfWeek.SUNDAY else DayOfWeek.of(index)
             Text(
                 text = weekday.getDisplayName(JavaTextStyle.SHORT, Locale.ENGLISH).take(3),
                 modifier = Modifier.weight(1f).padding(vertical = 8.dp),

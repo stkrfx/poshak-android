@@ -39,10 +39,11 @@ import com.stkrfx.poshak.ui.auth.ForgotPasswordScreen
 import com.stkrfx.poshak.ui.auth.LoginScreen
 import com.stkrfx.poshak.ui.auth.ResetPasswordScreen
 import com.stkrfx.poshak.ui.home.HomeScreen
+import com.stkrfx.poshak.ui.workspace.AuthenticatedWorkspace
 import kotlinx.coroutines.launch
 
 @Composable
-fun PoshakApp(api: PoshakApi) {
+fun PoshakApp(api: PoshakApi, themeMode: String, onThemeModeChanged: (String) -> Unit) {
     val backStack = rememberNavBackStack(StartupRoute)
     var profile by remember { mutableStateOf<EmployeeProfile?>(null) }
     var resetEmail by rememberSaveable { mutableStateOf("") }
@@ -178,16 +179,17 @@ fun PoshakApp(api: PoshakApi) {
                             CircularProgressIndicator()
                         }
                     } else {
-                        HomeScreen(
+                        AuthenticatedWorkspace(
                             api = api,
                             profile = signedInProfile,
+                            themeMode = themeMode,
+                            onThemeModeChanged = onThemeModeChanged,
                             onSessionExpired = {
                                 profile = null
                                 backStack.clear()
                                 backStack.add(LoginRoute)
                             },
                             onLogout = {
-                                // A failed network logout still clears local credentials in the API layer.
                                 coroutineScope.launch {
                                     try {
                                         api.logoutCurrentDevice()
