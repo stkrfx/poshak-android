@@ -40,7 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
@@ -50,10 +50,10 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -165,8 +165,8 @@ internal fun ProfileOverviewScreen(
         ActionRow(Icons.Filled.Devices, "Logged-in devices", "Review and manage active sessions", onDevices)
         ActionRow(Icons.Filled.Tune, "Settings", "Theme, app lock and preferences", onSettings)
         ActionRow(Icons.Filled.SwapHoriz, "Switch account", "Manage accounts on this device", onSwitchAccount)
-        ActionRow(Icons.Filled.HelpOutline, "Contact developer", "Get help on WhatsApp", onSupport)
-        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.Logout, null); Spacer(Modifier.width(8.dp)); Text("Log out") }
+        ActionRow(Icons.AutoMirrored.Filled.HelpOutline, "Contact developer", "Get help on WhatsApp", onSupport)
+        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Icon(Icons.AutoMirrored.Filled.Logout, null); Spacer(Modifier.width(8.dp)); Text("Log out") }
         Spacer(Modifier.height(20.dp))
     }
 }
@@ -254,7 +254,7 @@ internal fun SettingsScreen(
         ActionRow(Icons.Filled.Devices, "Devices", "Manage active sessions", onDevices)
         SectionTitle("Accounts and help")
         ActionRow(Icons.Filled.SwapHoriz, "Switch account", "Switch or add another account", onSwitchAccount)
-        ActionRow(Icons.Filled.HelpOutline, "Contact developer", "Open WhatsApp support", onSupport)
+        ActionRow(Icons.AutoMirrored.Filled.HelpOutline, "Contact developer", "Open WhatsApp support", onSupport)
         Card { Column(Modifier.padding(14.dp)) { Text("Privacy", fontWeight = FontWeight.SemiBold); Text("Attendance and documents are sensitive screens. App-lock timeout and secure previews will be enforced as part of the platform integration.", style = MaterialTheme.typography.bodySmall) } }
     }
 }
@@ -274,7 +274,7 @@ internal fun AppLockScreen(currentMode: String, isPrimary: Boolean, onBack: () -
 @Composable
 internal fun SetPinScreen(pin: String, confirmPin: String, error: String?, title: String, onPinChange: (String) -> Unit, onConfirmChange: (String) -> Unit, onBack: () -> Unit, onSave: () -> Unit) {
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }; Spacer(Modifier.width(6.dp)); Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }; Spacer(Modifier.width(6.dp)); Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         Box(Modifier.size(88.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Lock, null, Modifier.size(38.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
         Text("Choose a four-digit PIN", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Text("Avoid easy-to-guess combinations such as 1234 or your birth year.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -300,7 +300,7 @@ internal fun SwitchAccountScreen(accounts: List<LocalAccount>, onBack: () -> Uni
                     Column(Modifier.weight(1f)) { Text(account.label, fontWeight = FontWeight.SemiBold); Text(account.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (account.isPrimary) AssistChip(onClick = {}, label = { Text("Primary") }) }
                     if (account.label == "Add another account") IconButton(onClick = { onSwitch(account) }) { Icon(Icons.Filled.Add, "Add account") } else {
                         TextButton(onClick = { onSwitch(account) }) { Text("Open") }
-                        if (!account.isPrimary) IconButton(onClick = { removeTarget = account }) { Icon(Icons.Filled.Logout, "Remove account") }
+                        if (!account.isPrimary) IconButton(onClick = { removeTarget = account }) { Icon(Icons.AutoMirrored.Filled.Logout, "Remove account") }
                     }
                 }
             }
@@ -393,7 +393,7 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
 @Composable
 internal fun PageHeader(title: String, subtitle: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
