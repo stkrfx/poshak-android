@@ -692,3 +692,24 @@ fun AuthenticatedWorkspace(
     }
 }
 
+/**
+ * Opens a WhatsApp conversation with the Poshak support contact.
+ * Falls back to the WhatsApp web URL if the app is not installed.
+ */
+private fun openWhatsApp(context: android.content.Context) {
+    val phone = DEVELOPER_WHATSAPP
+    val uri = Uri.parse("https://wa.me/$phone")
+    val appIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+        setPackage("com.whatsapp")
+    }
+    try {
+        context.startActivity(appIntent)
+    } catch (_: android.content.ActivityNotFoundException) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: android.content.ActivityNotFoundException) {
+            // No browser/WhatsApp handler is available on this device.
+        }
+    }
+}
+
