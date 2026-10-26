@@ -144,13 +144,13 @@ fun AuthenticatedWorkspace(
     val context = LocalContext.current
     val localPreferences = remember { context.getSharedPreferences("poshak_local_data", android.content.Context.MODE_PRIVATE) }
     val localVault = remember { com.stkrfx.poshak.data.LocalDeviceVault(context) }
-    var latestProfile by remember { mutableStateOf(profile) }
+    var latestProfile by remember(profile.id) { mutableStateOf(api.loadCachedProfile() ?: profile) }
     var profileRefreshing by rememberSaveable { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.OVERVIEW) }
     var showSwitchOrLogout by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
-    var showBlockedDialog by remember { mutableStateOf(latestProfile.isBlocked) }
+    var showBlockedDialog by remember { mutableStateOf(false) }
     var profileName by rememberSaveable { mutableStateOf(latestProfile.name) }
     var username by rememberSaveable { mutableStateOf(localPreferences.getString("profile_username", latestProfile.username) ?: latestProfile.username) }
     var email by rememberSaveable { mutableStateOf(localPreferences.getString("profile_email", latestProfile.email.orEmpty()) ?: latestProfile.email.orEmpty()) }
@@ -225,6 +225,16 @@ fun AuthenticatedWorkspace(
         if (appLock == "NONE") { appLockVerified = true; showAppUnlock = false }
     }
 
+    // Blocked-account messaging must appear only after the configured app lock is passed.
+    androidx.compose.runtime.LaunchedEffect(latestProfile.isBlocked, appLock, appLockVerified, showAppUnlock) {
+        val lockPassed = when (appLock) {
+            "NONE" -> true
+            "PIN" -> !showAppUnlock
+            else -> appLockVerified
+        }
+        if (latestProfile.isBlocked && lockPassed) showBlockedDialog = true
+    }
+
     BackHandler(enabled = showSwitchOrLogout || confirmLogout || showDeviceOtp || showSalaryDialog || showSalaryUnlock || themeExpanded || profilePage != ProfilePage.OVERVIEW || selectedTab != MainTab.HOME) {
         when {
             showSwitchOrLogout -> showSwitchOrLogout = false
@@ -238,7 +248,8 @@ fun AuthenticatedWorkspace(
         }
     }
     androidx.compose.runtime.LaunchedEffect(selectedTab, profilePage) {
-        if (selectedTab == MainTab.PROFILE) {
+        // Render the cached profile immediately; refresh only when the profile overview is entered.
+        if (selectedTab == MainTab.PROFILE && profilePage == ProfilePage.OVERVIEW) {
             profileRefreshing = true
             try {
                 val fresh = api.fetchProfile()
@@ -252,7 +263,16 @@ fun AuthenticatedWorkspace(
                 dobLocked = fresh.isDateOfBirthLocked
                 showBlockedDialog = fresh.isBlocked
             } catch (error: com.stkrfx.poshak.data.ApiException) {
-                if (error.statusCode == 401 || error.apiCode == "ACCOUNT_BLOCKED") onSessionExpired()
+                when {
+                    error.apiCode == "ACCOUNT_BLOCKED" -> {
+                        latestProfile = (error.blockedProfile ?: latestProfile.copy(isBlocked = true))
+                            .copy(isBlocked = true, blockedReason = error.blockedReason ?: error.message)
+                    }
+                    error.statusCode == 401 || error.apiCode in setOf("SESSION_REVOKED", "SESSION_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND") -> onSessionExpired()
+                    else -> scope.launch {
+                        snackbarHostState.showSnackbar("Showing saved profile. Latest details could not be refreshed.")
+                    }
+                }
             } catch (_: Exception) {
                 // Keep the existing profile visible if a background refresh fails.
             } finally {
@@ -321,7 +341,7 @@ fun AuthenticatedWorkspace(
             icon = { Icon(Icons.Filled.Security, contentDescription = null) },
             title = { Text("Account access restricted") },
             text = { Text(latestProfile.blockedReason ?: "This account has been blocked by an administrator. Contact support or switch to another account.") },
-            confirmButton = { TextButton(onClick = { showBlockedDialog = false; openWhatsApp(context) }) { Text("Contact support") } },
+            confirmButton = { TextButton(onClick = { showBlockedDialog = false; onSessionExpired(); openWhatsApp(context) }) { Text("Contact support") } },
             dismissButton = { TextButton(onClick = { showBlockedDialog = false; profilePage = ProfilePage.SWITCH_ACCOUNT; selectedTab = MainTab.PROFILE }) { Text("Switch account") } },
         )
     }
@@ -446,6 +466,11 @@ fun AuthenticatedWorkspace(
     ) { scaffoldPadding ->
         Box(Modifier.fillMaxSize().padding(scaffoldPadding)) {
             when {
+                latestProfile.isBlocked && !(selectedTab == MainTab.PROFILE && profilePage == ProfilePage.SWITCH_ACCOUNT) -> {
+                    // Do not render protected attendance/document screens once the backend
+                    // reports a blocked account; the blocking dialog remains above this surface.
+                    Box(Modifier.fillMaxSize())
+                }
                 selectedTab == MainTab.HOME -> HomeScreen(
                     api = api,
                     profile = latestProfile,
@@ -470,7 +495,7 @@ fun AuthenticatedWorkspace(
                 )
                 else -> when (profilePage) {
                     ProfilePage.OVERVIEW -> ProfileOverviewScreen(
-                        profile = profile,
+                        profile = latestProfile,
                         displayName = profileName,
                         username = username,
                         email = email,
@@ -489,7 +514,7 @@ fun AuthenticatedWorkspace(
                         onSupport = { openWhatsApp(context) },
                     )
                     ProfilePage.EDIT -> EditProfileScreen(
-                        profile = profile,
+                        profile = latestProfile,
                         username = username,
                         email = email,
                         address = address,

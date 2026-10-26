@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 class PoshakApi(context: Context) {
     private val appContext = context.applicationContext
     private val sessionStore = SecureSessionStore(appContext)
+    private val profileCache = LocalProfileCache(appContext)
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     suspend fun checkAppVersion(): AppUpdateStatus = withContext(Dispatchers.IO) {
@@ -57,31 +58,40 @@ class PoshakApi(context: Context) {
         val profileJson = data.optJSONObject("user")
             ?: throw ApiException(500, "INVALID_RESPONSE", "The server did not return your account details.")
         sessionStore.save(credentials)
-        profileFrom(profileJson)
+        profileFrom(profileJson).also { profileCache.save(credentials.sessionId, it) }
     }
 
     suspend fun restoreSession(): EmployeeProfile? = withContext(Dispatchers.IO) {
         if (sessionStore.load() == null) return@withContext null
         try {
             val response = authenticatedRequest("GET", "/api/v1/profile")
-            val profile = response.optJSONObject("data")
+            val profileJson = response.optJSONObject("data")
                 ?: throw ApiException(500, "INVALID_RESPONSE", "The server returned an incomplete profile response.")
-            profileFrom(profile)
+            profileFrom(profileJson).also { profileCache.save(sessionStore.load()?.sessionId.orEmpty(), it) }
         } catch (error: ApiException) {
             if (error.statusCode == 401 || error.apiCode == "ACCOUNT_BLOCKED") {
-                sessionStore.clear()
+                clearSessionAndProfile()
                 if (error.statusCode == 401) return@withContext null
             }
             throw error
         }
     }
 
-    /** Fetches the latest account profile without changing the current navigation state. */
+    /** Read the last successfully fetched profile for the currently stored session. */
+    fun loadCachedProfile(): EmployeeProfile? {
+        val session = sessionStore.load() ?: return null
+        return profileCache.load(session.sessionId)
+    }
+
+    /** Fetches the latest account profile and atomically replaces its local snapshot. */
     suspend fun fetchProfile(): EmployeeProfile = withContext(Dispatchers.IO) {
         val response = authenticatedRequest("GET", "/api/v1/profile")
         val data = response.optJSONObject("data")
             ?: throw ApiException(500, "INVALID_RESPONSE", "The server returned an incomplete profile response.")
-        profileFrom(data)
+        val profile = profileFrom(data)
+        val sessionId = sessionStore.load()?.sessionId.orEmpty()
+        profileCache.save(sessionId, profile)
+        profile
     }
 
     suspend fun fetchAttendance(): AttendanceSnapshot = withContext(Dispatchers.IO) {
@@ -150,7 +160,7 @@ class PoshakApi(context: Context) {
                     .put("otp_code", otp.trim())
                     .put("new_password", newPassword),
             )
-            sessionStore.clear()
+            clearSessionAndProfile()
             response.optString("message", "Password updated. You can now log in.")
         }
 
@@ -160,11 +170,17 @@ class PoshakApi(context: Context) {
                 authenticatedRequest("POST", "/api/v1/profile/devices/logout-current")
             }
         } finally {
-            sessionStore.clear()
+            clearSessionAndProfile()
         }
     }
 
     fun hasLocalSession(): Boolean = sessionStore.load() != null
+
+    private fun clearSessionAndProfile() {
+        val sessionId = sessionStore.load()?.sessionId
+        if (sessionId.isNullOrBlank()) profileCache.clearAll() else profileCache.clear(sessionId)
+        sessionStore.clear()
+    }
 
     private fun authenticatedRequest(
         method: String,
@@ -178,7 +194,7 @@ class PoshakApi(context: Context) {
             return execute(method, path, body, existing.accessToken)
         } catch (error: ApiException) {
             if (error.statusCode == 403 && error.apiCode == "ACCOUNT_BLOCKED") {
-                sessionStore.clear()
+                clearSessionAndProfile()
                 throw error
             }
             if (error.statusCode != 401) throw error
@@ -187,14 +203,14 @@ class PoshakApi(context: Context) {
         val refreshed = try {
             refresh(existing)
         } catch (error: ApiException) {
-            if (error.statusCode == 401 || error.statusCode == 403) sessionStore.clear()
+            if (error.statusCode == 401 || error.statusCode == 403) clearSessionAndProfile()
             throw error
         }
 
         return try {
             execute(method, path, body, refreshed.accessToken)
         } catch (error: ApiException) {
-            if (error.statusCode == 401 || error.apiCode == "ACCOUNT_BLOCKED") sessionStore.clear()
+            if (error.statusCode == 401 || error.apiCode == "ACCOUNT_BLOCKED") clearSessionAndProfile()
             throw error
         }
     }
@@ -271,7 +287,16 @@ class PoshakApi(context: Context) {
                 val appRelease = response.optJSONObject("data")
                     ?.optJSONObject("latest_release")
                     ?.let(::releaseFrom)
-                throw ApiException(status, code, message, appRelease)
+                val responseData = response.optJSONObject("data")
+                val blockedReason = responseData?.optString("blocked_reason")
+                    ?.takeIf { it.isNotBlank() && it != "null" }
+                val blockedProfile = responseData?.optJSONObject("user")?.let { userJson ->
+                    profileFrom(userJson).copy(
+                        isBlocked = true,
+                        blockedReason = blockedReason ?: message,
+                    )
+                }
+                throw ApiException(status, code, message, appRelease, blockedReason, blockedProfile)
             }
             return response
         } catch (error: ApiException) {
