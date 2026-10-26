@@ -99,6 +99,7 @@ fun HomeScreen(
     var loadError by rememberSaveable { mutableStateOf<String?>(null) }
     var refreshKey by rememberSaveable { mutableIntStateOf(0) }
     var pullDistance by remember { mutableStateOf(0f) }
+    val refreshThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
     var selectedSheetName by rememberSaveable { mutableStateOf<String?>(null) }
     var monthPickerExpanded by rememberSaveable { mutableStateOf(false) }
     var showSummary by rememberSaveable { mutableStateOf(false) }
@@ -106,19 +107,6 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
 
     val widgetContext = androidx.compose.ui.platform.LocalContext.current
-
-    fun contextForWidgetUpdate(snapshot: AttendanceSnapshot, status: String) {
-        widgetContext.getSharedPreferences("poshak_widget_data", android.content.Context.MODE_PRIVATE)
-            .edit()
-            .putString("today_date", LocalDate.now().toString())
-            .putString("today_status", status)
-            .apply()
-        val manager = android.appwidget.AppWidgetManager.getInstance(widgetContext)
-        val component = android.content.ComponentName(widgetContext, com.stkrfx.poshak.widget.TodayAttendanceWidgetProvider::class.java)
-        val ids = manager.getAppWidgetIds(component)
-        if (ids.isNotEmpty()) manager.notifyAppWidgetViewDataChanged(ids, 0)
-        com.stkrfx.poshak.widget.TodayAttendanceWidgetProvider.updateAll(widgetContext)
-    }
 
     LaunchedEffect(refreshKey) {
         loading = true
@@ -129,7 +117,7 @@ fun HomeScreen(
             val today = LocalDate.now()
             val todayStatus = loaded.months.firstOrNull { it.yearMonth == YearMonth.from(today) }
                 ?.days?.firstOrNull { it.date == today }?.status ?: "UNMARKED"
-            contextForWidgetUpdate(loaded, todayStatus)
+            com.stkrfx.poshak.widget.AttendanceWidgetUpdater.update(widgetContext, todayStatus)
             val loadedSheetNames = loaded.months.map { it.sheetName }
             if (selectedSheetName == null || selectedSheetName !in loadedSheetNames) {
                 selectedSheetName = loaded.months.firstOrNull { it.yearMonth == YearMonth.now() }?.sheetName
@@ -226,26 +214,29 @@ fun HomeScreen(
             }
         },
     ) { innerPadding ->
+        Box(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).pointerInput(loading, refreshThresholdPx) {
+                detectVerticalDragGestures(
+                    onVerticalDrag = { _, amount ->
+                        pullDistance = (pullDistance + amount).coerceIn(0f, refreshThresholdPx * 1.5f)
+                    },
+                    onDragEnd = {
+                        val shouldRefresh = pullDistance >= refreshThresholdPx && !loading
+                        pullDistance = 0f
+                        if (shouldRefresh) refreshKey++
+                    },
+                    onDragCancel = { pullDistance = 0f },
+                )
+            },
+        ) {
         when {
             loading && currentSnapshot == null -> Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).pointerInput(loading, currentSnapshot) {
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { _, amount -> pullDistance = (pullDistance + amount).coerceIn(0f, 180f) },
-                        onDragEnd = { if (pullDistance > 65f && !loading) refreshKey++; pullDistance = 0f },
-                        onDragCancel = { pullDistance = 0f },
-                    )
-                },
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
             currentSnapshot == null -> Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp).pointerInput(loading) {
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { _, amount -> pullDistance = (pullDistance + amount).coerceIn(0f, 180f) },
-                        onDragEnd = { if (pullDistance > 65f && !loading) refreshKey++; pullDistance = 0f },
-                        onDragCancel = { pullDistance = 0f },
-                    )
-                },
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -255,7 +246,7 @@ fun HomeScreen(
             }
 
             selectedMonth == null -> Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -264,13 +255,7 @@ fun HomeScreen(
             }
 
             else -> Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 12.dp).pointerInput(loading) {
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { _, amount -> pullDistance = (pullDistance + amount).coerceIn(0f, 180f) },
-                        onDragEnd = { if (pullDistance > 65f && !loading) refreshKey++; pullDistance = 0f },
-                        onDragCancel = { pullDistance = 0f },
-                    )
-                },
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
             ) {
                 if (loadError != null) {
                     Text(loadError.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp))
@@ -323,175 +308,38 @@ fun HomeScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CalendarGrid(
-    modifier: Modifier = Modifier,
-    selectedMonth: AttendanceMonth,
-    allMonths: List<AttendanceMonth>,
-    onSelectMonth: (String) -> Unit,
-    onShowNote: (String) -> Unit,
-    weekStartsMonday: Boolean,
-) {
-    val start = selectedMonth.yearMonth.atDay(1)
-    val startOffset = if (weekStartsMonday) start.dayOfWeek.value - 1 else start.dayOfWeek.value % 7
-    val firstCellDate = start.minusDays(startOffset.toLong())
-    val allowedYearMonths = allMonths.map { it.yearMonth }.toSet()
-    val daysByDate = allMonths.flatMap { it.days }.associateBy { it.date }
-    val today = LocalDate.now()
-
-    Column(modifier = modifier.pointerInput(selectedMonth, allMonths) {
-        var horizontalDistance = 0f
-        detectHorizontalDragGestures(
-            onHorizontalDrag = { _, amount -> horizontalDistance += amount },
-            onDragEnd = {
-                if (kotlin.math.abs(horizontalDistance) > 70f) {
-                    val sorted = allMonths.sortedBy { it.yearMonth }
-                    val currentIndex = sorted.indexOfFirst { it.sheetName == selectedMonth.sheetName }
-                    val targetIndex = if (horizontalDistance < 0f) currentIndex + 1 else currentIndex - 1
-                    sorted.getOrNull(targetIndex)?.let { onSelectMonth(it.sheetName) }
-                }
-                horizontalDistance = 0f
-            },
-            onDragCancel = { horizontalDistance = 0f },
-        )
-    }) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        (0..6).forEach { index ->
-            val weekday = if (weekStartsMonday) DayOfWeek.of(index + 1) else if (index == 0) DayOfWeek.SUNDAY else DayOfWeek.of(index)
-            Text(
-                text = weekday.getDisplayName(JavaTextStyle.SHORT, Locale.ENGLISH).take(3),
-                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selectedMonth.yearMonth == YearMonth.from(today) && weekday == today.dayOfWeek) FontWeight.Bold else FontWeight.Normal,
-                color = if (selectedMonth.yearMonth == YearMonth.from(today) && weekday == today.dayOfWeek) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-
-    repeat(6) { weekIndex ->
-        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            repeat(7) { dayIndex ->
-                val date = firstCellDate.plusDays((weekIndex * 7 + dayIndex).toLong())
-                val record = daysByDate[date]
-                val status = record?.status ?: if (date == today) "UNMARKED" else "NA"
-                val isInVisibleMonth = YearMonth.from(date) == selectedMonth.yearMonth
-                val canNavigateToMonth = YearMonth.from(date) in allowedYearMonths
-                val backgroundColor = statusColor(status, date == today)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(2.dp)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(backgroundColor)
-                        .clickable {
-                            if (!isInVisibleMonth && canNavigateToMonth) {
-                                allMonths.firstOrNull { it.yearMonth == YearMonth.from(date) }?.let { onSelectMonth(it.sheetName) }
-                            }
-                            record?.note?.takeIf { it.isNotBlank() }?.let(onShowNote)
-                        },
-                    contentAlignment = Alignment.Center,
+        AnimatedVisibility(
+            visible = pullDistance > 0f || (loading && currentSnapshot != null),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+            enter = fadeIn(tween(120)) + expandVertically(tween(160)),
+            exit = fadeOut(tween(120)) + shrinkVertically(tween(140)),
+        ) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+                elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 4.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Box(contentAlignment = Alignment.TopEnd, modifier = Modifier.fillMaxSize().padding(2.dp)) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            if (date == today) {
-                                Box(
-                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(date.dayOfMonth.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                }
-                            } else {
-                                Text(
-                                    text = date.dayOfMonth.toString(),
-                                    color = when {
-                                        date == today -> MaterialTheme.colorScheme.onPrimary
-                                        status == "P" || status == "PRESENT" || status == "A" || status == "ABSENT" || status == "HD" || status == "HALF_DAY" || status == "HALFDAY" ->
-                                            if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF151515) else Color(0xFF151515)
-                                        !isInVisibleMonth && !canNavigateToMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f)
-                                        !isInVisibleMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    },
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            }
-                        }
-                        if (!record?.note.isNullOrBlank()) {
-                            Box(
-                                modifier = Modifier.size(5.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                            )
-                        }
-                    }
+                    if (loading && currentSnapshot != null) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Text(if (pullDistance >= refreshThresholdPx) "↻" else "↓", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when {
+                            loading && currentSnapshot != null -> "Refreshing attendance…"
+                            pullDistance >= refreshThresholdPx -> "Release to refresh"
+                            else -> "Pull down to refresh"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
         }
-    }
-    }
-}
-
-@Composable
-private fun SummaryGrid(month: AttendanceMonth) {
-    val summary = month.summary
-    Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SummaryCard("Present", summary?.present ?: "—", Modifier.weight(1f), Color(0xFFD5F5E3))
-            SummaryCard("Absent", summary?.absent ?: "—", Modifier.weight(1f), Color(0xFFFADBD8))
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SummaryCard("Payable days", summary?.payable ?: "—", Modifier.weight(1f), Color(0xFFFFF0B3))
-            SummaryCard("Paid days", summary?.paid ?: "—", Modifier.weight(1f), Color(0xFFD6EAF8))
         }
     }
 }
 
-@Composable
-private fun SummaryCard(title: String, value: String, modifier: Modifier = Modifier, backgroundColor: Color) {
-    Card(modifier = modifier, colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = backgroundColor)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = Color(0xFF333333))
-            Spacer(Modifier.height(4.dp))
-            val numericValue = value.toIntOrNull()
-            val animatedValue by animateIntAsState(
-                targetValue = numericValue ?: 0,
-                animationSpec = tween(durationMillis = 650),
-                label = "summary-number-$title",
-            )
-            Text(
-                text = numericValue?.let { animatedValue.toString() } ?: value,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color(0xFF171717),
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusLegend(label: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-private fun statusColor(status: String, isToday: Boolean): Color = when (status.uppercase(Locale.ROOT)) {
-    "P", "PRESENT" -> PRESENT
-    "A", "ABSENT" -> ABSENT
-    "H", "HALF_DAY", "HALF-DAY" -> HALF_DAY
-    "UNMARKED" -> if (isToday) UNMARKED else Color.Transparent
-    else -> if (isToday) UNMARKED else Color.Transparent
-}
-
-private fun fullMonthName(yearMonth: YearMonth): String =
-    yearMonth.month.getDisplayName(JavaTextStyle.FULL, Locale.ENGLISH)
-
-private val PRESENT = Color(0xFFD5F5E3)
-private val ABSENT = Color(0xFFFADBD8)
-private val HALF_DAY = Color(0xFFFFF0B3)
-private val UNMARKED = Color(0xFFE4B83A)

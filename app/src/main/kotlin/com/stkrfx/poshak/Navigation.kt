@@ -39,6 +39,7 @@ import com.stkrfx.poshak.ui.auth.ForgotPasswordScreen
 import com.stkrfx.poshak.ui.auth.LoginScreen
 import com.stkrfx.poshak.ui.auth.ResetPasswordScreen
 import com.stkrfx.poshak.ui.home.HomeScreen
+import com.stkrfx.poshak.ui.security.SensitiveWindowProtection
 import com.stkrfx.poshak.ui.workspace.AuthenticatedWorkspace
 import kotlinx.coroutines.launch
 
@@ -56,6 +57,11 @@ fun PoshakApp(api: PoshakApi, themeMode: String, onThemeModeChanged: (String) ->
     var updateDownloadError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    // Authenticated screens and OTP/password-reset flows must never appear in Recents previews.
+    SensitiveWindowProtection(
+        enabled = backStack.lastOrNull() in setOf(ForgotPasswordRoute, EmailOtpRoute, ResetPasswordRoute),
+    )
 
     val requireUpdate: (AppRelease) -> Unit = { release ->
         requiredRelease = release

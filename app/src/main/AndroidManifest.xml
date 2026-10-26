@@ -5,9 +5,9 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/poshak_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@drawable/poshak_launcher"
         android:supportsRtl="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}"
         android:theme="@style/Theme.Poshak">

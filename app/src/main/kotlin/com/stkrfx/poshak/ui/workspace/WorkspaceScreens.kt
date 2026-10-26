@@ -115,7 +115,11 @@ import androidx.compose.ui.unit.dp
 import com.stkrfx.poshak.data.EmployeeProfile
 import com.stkrfx.poshak.data.PoshakApi
 import com.stkrfx.poshak.ui.home.HomeScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.stkrfx.poshak.data.ProfilePhotoProcessor
+import com.stkrfx.poshak.ui.security.SensitiveWindowProtection
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -152,11 +156,11 @@ fun AuthenticatedWorkspace(
     var confirmLogout by remember { mutableStateOf(false) }
     var showBlockedDialog by remember { mutableStateOf(false) }
     var profileName by rememberSaveable { mutableStateOf(latestProfile.name) }
-    var username by rememberSaveable { mutableStateOf(localPreferences.getString("profile_username", latestProfile.username) ?: latestProfile.username) }
-    var email by rememberSaveable { mutableStateOf(localPreferences.getString("profile_email", latestProfile.email.orEmpty()) ?: latestProfile.email.orEmpty()) }
-    var address by rememberSaveable { mutableStateOf(localPreferences.getString("profile_address", latestProfile.address.orEmpty()) ?: latestProfile.address.orEmpty()) }
-    var dob by rememberSaveable { mutableStateOf(localPreferences.getString("profile_dob", latestProfile.dateOfBirth.orEmpty()) ?: latestProfile.dateOfBirth.orEmpty()) }
-    var avatar by rememberSaveable { mutableStateOf(localPreferences.getString("profile_avatar", latestProfile.avatarUrl.orEmpty()) ?: latestProfile.avatarUrl.orEmpty()) }
+    var username by rememberSaveable { mutableStateOf(latestProfile.username) }
+    var email by rememberSaveable { mutableStateOf(latestProfile.email.orEmpty()) }
+    var address by rememberSaveable { mutableStateOf(latestProfile.address.orEmpty()) }
+    var dob by rememberSaveable { mutableStateOf(latestProfile.dateOfBirth.orEmpty()) }
+    var avatar by remember(latestProfile.id) { mutableStateOf(latestProfile.avatarUrl.orEmpty()) }
     var emailPending by rememberSaveable { mutableStateOf("") }
     var profileError by rememberSaveable { mutableStateOf<String?>(null) }
     var profileSaved by rememberSaveable { mutableStateOf(false) }
@@ -209,6 +213,52 @@ fun AuthenticatedWorkspace(
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // Protect only the sensitive views called out in task.txt; documents and updates remain shareable.
+    SensitiveWindowProtection(
+        enabled = selectedTab == MainTab.HOME ||
+            selectedTab == MainTab.PROFILE ||
+            showSalaryDialog ||
+            showSalaryUnlock ||
+            showDeviceOtp ||
+            profilePage == ProfilePage.EMAIL_OTP,
+    )
+    fun saveAvatarSelection(value: String) {
+        val optimisticProfile = latestProfile.copy(avatarUrl = value)
+        latestProfile = optimisticProfile
+        avatar = value
+        profileSaved = true
+        profileError = null
+        scope.launch {
+            withContext(Dispatchers.IO) { api.cacheProfile(optimisticProfile) }
+            try {
+                val savedProfile = api.updateProfile(avatarUrl = value)
+                latestProfile = savedProfile
+                avatar = savedProfile.avatarUrl.orEmpty()
+                profilePage = ProfilePage.OVERVIEW
+                snackbarHostState.showSnackbar("Profile picture updated.")
+            } catch (_: Exception) {
+                profilePage = ProfilePage.OVERVIEW
+                snackbarHostState.showSnackbar("Picture saved on this device, but couldn't sync with the server.")
+            }
+        }
+    }
+
+    val profilePhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val dataUri = withContext(Dispatchers.IO) {
+                        ProfilePhotoProcessor.toDataUri(context.contentResolver, uri)
+                    }
+                    saveAvatarSelection(dataUri)
+                } catch (error: Exception) {
+                    snackbarHostState.showSnackbar(error.message ?: "Couldn't load that photo. Choose another image.")
+                }
+            }
+        }
+    }
+
     val deviceLockLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         appLockVerified = result.resultCode == android.app.Activity.RESULT_OK
         deviceAuthUnavailable = !appLockVerified
@@ -261,7 +311,6 @@ fun AuthenticatedWorkspace(
                 dob = fresh.dateOfBirth.orEmpty()
                 avatar = fresh.avatarUrl.orEmpty()
                 dobLocked = fresh.isDateOfBirthLocked
-                showBlockedDialog = fresh.isBlocked
             } catch (error: com.stkrfx.poshak.data.ApiException) {
                 when {
                     error.apiCode == "ACCOUNT_BLOCKED" -> {
@@ -292,7 +341,6 @@ fun AuthenticatedWorkspace(
             .putString("profile_email", email)
             .putString("profile_address", address)
             .putString("profile_dob", dob)
-            .putString("profile_avatar", avatar)
             .apply()
         localVault.putString("app_pin", appPin)
         localVault.putString("salary_pin", salarySecretPin)
@@ -386,7 +434,12 @@ fun AuthenticatedWorkspace(
             onDismissRequest = { showAvatarActions = false },
             title = { Text("Profile picture") },
             text = { Text("Choose a generated avatar or select a picture from your device. Cropping and resizing controls are shown in the next step.") },
-            confirmButton = { TextButton(onClick = { avatar = listOf("🌿", "🌸", "🌞", "🪷", "🌼", "🌺").random(); showAvatarActions = false; profileSaved = true }) { Text("Generate random") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAvatarActions = false
+                    saveAvatarSelection(listOf("🌿", "🌸", "🌞", "🪷", "🌼", "🌺").random())
+                }) { Text("Generate random") }
+            },
             dismissButton = { TextButton(onClick = { showAvatarActions = false; profilePage = ProfilePage.AVATAR }) { Text("Choose / crop photo") } },
         )
     }
@@ -637,8 +690,8 @@ fun AuthenticatedWorkspace(
                     ProfilePage.AVATAR -> AvatarEditorScreen(
                         currentAvatar = avatar,
                         onBack = { profilePage = ProfilePage.OVERVIEW },
-                        onChoose = { avatar = it; profilePage = ProfilePage.OVERVIEW; scope.launch { snackbarHostState.showSnackbar("Avatar selected for UI preview.") } },
-                        onUpload = { scope.launch { snackbarHostState.showSnackbar("Photo picker and image cropper will be wired in the Android integration pass.") } },
+                        onChoose = { saveAvatarSelection(it) },
+                        onUpload = { profilePhotoPicker.launch("image/*") },
                     )
                 }
             }
@@ -842,7 +895,7 @@ private fun AvatarEditorScreen(currentAvatar: String, onBack: () -> Unit, onChoo
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("🌼", "🌺", "🌻", "🍀").forEach { symbol -> AssistChip(onClick = { onChoose(symbol) }, label = { Text(symbol, style = MaterialTheme.typography.titleLarge) }) } }
         }
         Button(onClick = onUpload, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(8.dp)); Text("Choose photo and crop") }
-        Text("Photo selection, crop, resize and image upload will be connected after the UI is approved.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Selected photos are center-cropped and resized before saving, so your picture fits the avatar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -968,35 +1021,6 @@ private fun PageHeader(title: String, subtitle: String, onBack: () -> Unit) {
 private fun SectionTitle(title: String) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp)) }
 
 @Composable
-private fun AvatarMark(avatar: String, label: String) {
-    Box(Modifier.size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-        AvatarContent(avatar, label, Modifier.fillMaxSize(), MaterialTheme.typography.labelLarge)
-    }
-}
-
-@Composable
-private fun AvatarContent(value: String, fallbackLabel: String, modifier: Modifier, textStyle: androidx.compose.ui.text.TextStyle) {
-    val bitmap = androidx.compose.runtime.remember(value) {
-        runCatching {
-            if (!value.startsWith("data:image/", ignoreCase = true)) null
-            else {
-                val comma = value.indexOf(',')
-                if (comma < 0) null else {
-                    val metadata = value.substring(0, comma)
-                    val payload = value.substring(comma + 1)
-                    val bytes = if (metadata.contains(";base64", ignoreCase = true)) Base64.decode(payload, Base64.DEFAULT) else java.net.URLDecoder.decode(payload, Charsets.UTF_8.name()).toByteArray(Charsets.ISO_8859_1)
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                }
-            }
-        }.getOrNull()
-    }
-    if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = "Profile picture", modifier = modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-    } else {
-        val fallback = fallbackLabel.firstOrNull()?.uppercase() ?: "P"
-        Text(value.takeIf { it.isNotBlank() && !it.startsWith("data:image/") && !it.startsWith("http://") && !it.startsWith("https://") } ?: fallback, modifier = modifier, style = textStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
-    }
-}
 
 @Composable
 private fun EmptyState(title: String, body: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {

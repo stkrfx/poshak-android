@@ -94,6 +94,36 @@ class PoshakApi(context: Context) {
         profile
     }
 
+    /** Persist a profile change remotely and replace the encrypted local profile snapshot. */
+    suspend fun updateProfile(
+        username: String? = null,
+        dob: String? = null,
+        address: String? = null,
+        avatarUrl: String? = null,
+    ): EmployeeProfile = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+        username?.let { body.put("username", it.trim()) }
+        dob?.let { body.put("dob", it.trim()) }
+        address?.let { body.put("address", it.trim()) }
+        avatarUrl?.let { body.put("avatar_url", it) }
+        if (body.length() == 0) {
+            throw ApiException(400, "EMPTY_PROFILE_UPDATE", "There are no profile changes to save.")
+        }
+
+        val response = authenticatedRequest("PATCH", "/api/v1/profile", body)
+        val data = response.optJSONObject("data")
+            ?: throw ApiException(500, "INVALID_RESPONSE", "The server returned an incomplete profile update response.")
+        val updated = profileFrom(data)
+        sessionStore.load()?.sessionId?.let { profileCache.save(it, updated) }
+        updated
+    }
+
+    /** Cache an optimistic profile update locally while a remote update is in flight. */
+    fun cacheProfile(profile: EmployeeProfile) {
+        val sessionId = sessionStore.load()?.sessionId ?: return
+        profileCache.save(sessionId, profile)
+    }
+
     suspend fun fetchAttendance(): AttendanceSnapshot = withContext(Dispatchers.IO) {
         val response = authenticatedRequest("GET", "/api/v1/attendance")
         val data = response.optJSONObject("data")
