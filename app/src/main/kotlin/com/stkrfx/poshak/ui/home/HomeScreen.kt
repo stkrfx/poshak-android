@@ -1,5 +1,18 @@
 package com.stkrfx.poshak.ui.home
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -235,21 +248,36 @@ fun HomeScreen(
                 if (loadError != null) {
                     Text(loadError.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp))
                 }
-                if (showSummary) {
-                    SummaryGrid(selectedMonth)
-                    Spacer(Modifier.height(10.dp))
+                AnimatedVisibility(
+                    visible = showSummary,
+                    enter = fadeIn(tween(220)) + expandVertically(tween(260)),
+                    exit = fadeOut(tween(160)) + shrinkVertically(tween(220)),
+                ) {
+                    Column(Modifier.animateContentSize(animationSpec = tween(260))) {
+                        SummaryGrid(selectedMonth)
+                        Spacer(Modifier.height(10.dp))
+                    }
                 }
-                CalendarGrid(
+                AnimatedContent(
+                    targetState = selectedMonth.sheetName,
                     modifier = Modifier.weight(1f),
-                    selectedMonth = selectedMonth,
-                    allMonths = currentSnapshot.months,
-                    onSelectMonth = { selectedSheetName = it },
-                    onShowNote = { note ->
-                        // Notes are only surfaced after the employee taps a date that contains one.
-                        coroutineScope.launch { snackbarHost.showSnackbar(note) }
+                    transitionSpec = {
+                        (slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(220)))
+                            .togetherWith(slideOutHorizontally(tween(220)) { -it / 5 } + fadeOut(tween(180)))
+                            .using(SizeTransform(clip = false))
                     },
-                    weekStartsMonday = weekStartsMonday,
-                )
+                    label = "attendance-month-transition",
+                ) { monthName ->
+                    val animatedMonth = currentSnapshot.months.firstOrNull { it.sheetName == monthName } ?: selectedMonth
+                    CalendarGrid(
+                        modifier = Modifier.fillMaxSize(),
+                        selectedMonth = animatedMonth,
+                        allMonths = currentSnapshot.months,
+                        onSelectMonth = { selectedSheetName = it },
+                        onShowNote = { note -> coroutineScope.launch { snackbarHost.showSnackbar(note) } },
+                        weekStartsMonday = weekStartsMonday,
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -347,9 +375,9 @@ private fun CalendarGrid(
                                 Text(
                                     text = date.dayOfMonth.toString(),
                                     color = when {
-                                        !isInVisibleMonth && !canNavigateToMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
-                                        !isInVisibleMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                        else -> MaterialTheme.colorScheme.onSurface
+                                        !isInVisibleMonth && !canNavigateToMonth -> Color(0xFF666666).copy(alpha = 0.62f)
+                                        !isInVisibleMonth -> Color(0xFF555555).copy(alpha = 0.82f)
+                                        else -> Color(0xFF171717)
                                     },
                                     style = MaterialTheme.typography.labelLarge,
                                 )
@@ -388,9 +416,20 @@ private fun SummaryGrid(month: AttendanceMonth) {
 private fun SummaryCard(title: String, value: String, modifier: Modifier = Modifier, backgroundColor: Color) {
     Card(modifier = modifier, colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = backgroundColor)) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.labelMedium, color = Color(0xFF333333))
             Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            val numericValue = value.toIntOrNull()
+            val animatedValue by animateIntAsState(
+                targetValue = numericValue ?: 0,
+                animationSpec = tween(durationMillis = 650),
+                label = "summary-number-$title",
+            )
+            Text(
+                text = numericValue?.let { animatedValue.toString() } ?: value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color(0xFF171717),
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

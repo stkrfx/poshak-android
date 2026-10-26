@@ -201,10 +201,8 @@ fun AuthenticatedWorkspace(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    var showExitConfirmation by rememberSaveable { mutableStateOf(false) }
     BackHandler {
         when {
-            showExitConfirmation -> showExitConfirmation = false
             showSwitchOrLogout -> showSwitchOrLogout = false
             confirmLogout -> confirmLogout = false
             showDeviceOtp -> showDeviceOtp = false
@@ -213,7 +211,6 @@ fun AuthenticatedWorkspace(
             themeExpanded -> themeExpanded = false
             profilePage != ProfilePage.OVERVIEW -> profilePage = ProfilePage.OVERVIEW
             selectedTab != MainTab.HOME -> selectedTab = MainTab.HOME
-            else -> showExitConfirmation = true
         }
     }
     androidx.compose.runtime.LaunchedEffect(selectedTab, profilePage) {
@@ -278,16 +275,6 @@ fun AuthenticatedWorkspace(
                 }) { Text("Unlock") }
             },
             dismissButton = { TextButton(onClick = onLogout) { Text("Log out") } },
-        )
-    }
-
-    if (showExitConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showExitConfirmation = false },
-            title = { Text("Exit Poshak?") },
-            text = { Text("Your local settings and salary will remain saved on this device.") },
-            confirmButton = { TextButton(onClick = { showExitConfirmation = false; (context as? android.app.Activity)?.finish() }) { Text("Exit") } },
-            dismissButton = { TextButton(onClick = { showExitConfirmation = false }) { Text("Stay") } },
         )
     }
 
