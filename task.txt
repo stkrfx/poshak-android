@@ -1,0 +1,159 @@
+i want to create an android application using kotlin, jetpack compose and new extended material ui 3 components
+
+i need the following features to be in my appliation:
+- toggle password show/hide eye icon wherever i will be using a password input
+- ref to easily navigate through any form present in the application and submit that form (i was building android applications from react-native expo, there we have ref by using that we can make navigating through form experience top notch so i want the same thing to be here in the native kotlin android application)
+- resend otp feature wherever i will be using a otp input
+- i want to have the zod kind of system here in my kotlin applicaiton, means i want all my inputs to be properly validated
+- i want to have theme feature too. By which user could change their theme [system/light/dark]. default theme will be system theme
+- i want to have pull to refresh feature wherever necessary
+- i want to show a dialog for confirming user actions wherver necessary
+- i want my android application to ask for whatever permissions it requires from the user. figure out from this prompt what are the permissions which my application should ask for. and decide when it should ask for those permissions and then ask for the permissions when it should ask as per your knowledge
+- i want to use material you colors (means the colors inherited from the users wallpaper)
+- my application is gonna have show users update the application dialog. it could be of two types one which will force user to download and use the latest version of application and the other one is just informing them that our new version out you can update, and this informing one could be skipped or user also could update the application from here as they wish. but the forceful one can not be skipped they must have to download the latest version to start using the application.
+
+i need the following screens to be in my application:
+[login]: there should be two inputs. one for taking (mobile number, email address or username) and the other one for taking password. and there should be a forgot password link too.
+
+[forgot-password]: there should be only one input for taking (mobile number, email address or username)
+
+{forgot password screen will send user to otp screen}
+
+[otp]: there i want to have an otp input (note that i am saying explicitly to have an otp input not any general input)
+
+{otp screen wil send user to reset password screen}
+
+[reset-password]: there should be two inputs. one for taking new password and the other one for taking confirm new password
+
+[profile]: here user could see their profile picture, name, mobile number, gender, date of birth, username, email address, address, change password button, list of devices on which they are logged in, and feature by which they could logout [logout feature will be kind of either they can logout from the current device only, or every devices except the current one, or any specific device only] {{i want you to properly sort and organise things here in profile picture. for doing any of these logout except the current device logout requires the user to verify themselves first by the otp}}
+
+-- here in profile page user can only edit their profile picture, date of bith (it will use a date picker input, date of birth could be changed only once, after that in the backend i set a field "is_dob_locked" to true because of this the dob is not editable then after), username, email address (updating email address requires to validate the email through otp), address.
+
+-- there are two ways two edit the profile picture either generate random profile picture using dicebeer or upload the profile picture (the uploading profile picture part will also give user feature to crop, resize, and do diffrent action over the picture before seting it as the profile picture)
+
+-- the user could not edit their name, mobile number and gender
+
+-- the list of devices on which the user is logged in will show details of those devices too which the app will get from the backend
+
+{clicking on the button for changing password available on the profile page will send user to a change password screen}
+
+[change password]:there should be three inputs. one for taking current password, the second one for taking new password, and the last one for taking confirm new password. and there should be a forgot password link here in this page too.
+
+i also want to have controls to change theme (system/light/dark) - default is system. and also for login users i want them to be able to lock there application either by there device fingerprint/lock (exactly like how any upi app of our anroi device needs us to first enter our device lock), or four digit pin, for this i want to have controls for login users to set app lock (device lock/ four digit pin based lock/ no lock) - by default it will be device lock for the primary users.
+
+primary user is the first user which login inside the application.
+
+also i want to have a feature by which user could directly whatsapp the developer of this android application (whatsapp number of the developer is 8709782649). and also i want to have switch account feature in this application by which user could add different accounts and could switch to them whenever they wants to.
+
+all the accounts added by switch account feature will be considered as secondary users. and those secondary users will have only two options for locking their android app account (four digit pin based lock/ no lock) - by default it will be four digit pin based lock.
+
+user must go through the set four digit password screen first after login into the secondary account. for this purpose there will be a set pin screen
+
+[set-pin]: here i want to have two otp like inputs. one for taking pin and the other for confirming pin.
+
+{switching to any account will check for the mode of lock that particular user is set to, and the user must open that lock to get into that account}
+
+primary users could remove any seondary accounts available on their device. but secondary users could not.
+
+note that when the application will open both the device lock screen and pin screen will have the switch account feature so that any user could use that device to open their specific account without relying on the last logged in user account to first login into the device and then switch account from inside that account
+
+[home]: the home screen will have a header [in the left side of header there will be current month full name (this month name could become truncated as per the space available) along with a down caret icon clicking on which will add a line at the bottom of header containing chips of months names, those chips will only contain the three letters of the month names , here will be only three chips central aligned, one is of the current month and the rest two are of the previous two months, clicking on any chip will navigate to that month, and then in the right side of the header i will have a calculator icon and then there will be a rupee icon by default clicking on that icon will open a dialog box where user have to set their monthly salary amount (this amount will be completely stored locally inside their device, this amount will be only maximum of five digits and minimum of four digits, and this number should not can have decimal points otherwise the amount will not be accepted, and just after saving the amount user must have to set the pin to view this amount), and after setting the amount instead of the rupee ion there will be a chip, that chip will have a rupee icon and after that there will be the amount (but this amount will be kind of protected visibility, means it will be not visible by default it will be kind of XXXXX or *****, when user will click over the chip then it will open a pin screen (this pin screen is a different screen than the pin based lock screen, this screen will be used to view the amount and this must be configured just after setting the amount, and this could be changed too from the settings, just they have to tell the previous pin or their password of their accoutn, or mobile number otp or email otp, and then new pin, and then confirm pin) (now to alter this amount again the user has to long press over the chip, and this long press will open the dialog box again asking for their monthly salary)
+
+
+--- the calculator icon when pressed will add four tiles on the bottom of the home screen, one will contain total of present days, one will total of absent days, total payable days and total paid days
+
+after the top part of header and the middle part of header ( middle part of header refers to the chips of month name), the bottom part of header will contain week names (three letter week names), week will start with mon (monday) [yeah user could customize this thing whether they want the week to start with monday or sunday].
+
+now in the rest part i want cells to show dates, those cells background could be light green for present days, light red for absend days, light yellow for half days, and dark yellow for today's date whose attendance is not yet made. all cells will be filled means all cells with the dates. if any date contains a note it will show a dot over that cell, clicking on that dot based cell will show user snackbar showing what the note contains (user can only click over the cell which contains any note to show the snackbar). and clicking on the dates which are not of current month will move the user to that month (ntoe that we have a boundary of three months [the current month + previous two months] so user cannot go beyond this limit, so thatclicking on the dates beyond this limit will not gonna do anything.)
+
+
+
+by default the current month will be opened, and the current months current week name will be bolder than others and of accent color, and the current month, current date will be inside an accent colour circle. (so user's brain could easily figure it out that this date is today)
+
+there should be a navigation bar in the bottom, which will have four things (home will open home screen, documents will open documents screen, notification (it will be label as Updates) (it will show a dot when it will have unread notifications, note that i only want a dot, that dot should not include any number inside of it) will open notification screen, and profile (it will use my profile picture as its icon) will open profile screen).
+
+long pressing on the profile option present in the bottom navigation bar will trigger a feature which will let user switch account or logout. ( i want this feature so the user experience will be top notch )
+
+[notification]: here i want have mark all notification as read feature and all the notifications
+
+{{{{
+    there are features like user can be blocked by admin, or user ability to update their profile data can be blocked like if they setting their username to misleading or violating one, or any details to misleading data (this will be manually read and verified by the admin and decided that whether they want to block the user completely or just to make them unable to change their profile details so they can't harm the backend )
+
+    and for this blocking, i want the user to be able to see dialog over app that they have been blocked. like user open the application then their lock thing will appear they will verify that then they will see they have been blocked dialog, their will be two options either contact admin ( whatsapp number 8709782649 ) or switch account.
+
+    and while updating their profile they will be shown up with the dialog that they can't change their profile details they have not rights to do it, and there shuld be two options contact or close
+
+    Check the backend's account status when authenticating, refreshing the session, and performing protected operations. If a user is blocked while the app is already open, the app must react when it next learns about the change
+}}}}
+
+
+
+{{{{{
+    i also want to have home screen widget which will show the today's date attendance, means their will be the todya's date and the status of attendance either they are present, absent half-day or their status have not been made yet
+}}}}}
+
+{{{
+    Removing a secondary account
+1. Primary user selects a secondary account.
+2. Show a confirmation dialog identifying the account.
+3. Remove its local account association and account-specific cached data.
+4. Revoke its server session too
+}}}
+
+{{{
+    a secondary account with no lock should requires backend reauthentication when its session has expired.
+}}}
+
+
+{{{
+    Decide what happens when a refresh token expires, a device is revoked remotely, or the backend blocks an account while the app is open.
+    -- then they will get logout on hitting the database next time, with showing the reason in the snackbar
+}}}
+
+
+
+{{{{{
+    Every form must needs loading, success, validation, empty, offline, and server-error states. Prevent duplicate submissions, preserve entered values where safe, 
+    
+
+    
+    
+    how users can recover from rate limits, expired OTPs, network timeouts, and maintenance? and the answer is they just have to wait fo the thing to be fixed automatically. means try again later
+}}}}}
+
+
+{{{{{
+    Primary account identification: What happens if the first account is removed, logs out, or is no longer available? Does the primary designation remain permanently associated with an account, or can it be transferred?
+
+    --- yes the primary designation will remain permanently associated with that first account which did the login inside them. it can not be transferred
+}}}}}
+
+
+
+{{{{
+    Background locking: Decide whether locking happens immediately when the app backgrounds, after a configurable timeout, or after the device has been locked. Cover process death and returning from the recent-apps screen.
+
+
+    *** the only sensitive screen is the home screen (which have the attendacne calendar) and document screen in the whole application ***
+
+    ---- the locking will happen after a delay which is 5min (this is not configurable) and also after the device has been locked. if the delay is not over and app is not locked and they are returing from recent apps screen they can use the app. but if the condition doesn not satisfy they need to unlock their application first
+
+
+
+Sensitive screen protection: Decide whether salary, OTPs, and profile data should be hidden in app-switcher previews or screenshots.
+
+-- yeah only the home, profile, salary, and otp thig will not be visible in app-switcher previews or screenshots.
+}}}}
+
+
+
+
+{{{{{
+    On the primary account, use Android's system-supported device credential prompt, not a custom imitation of the device-lock screen. If the user has a device PIN or password but no biometric enrollment, the system credential fallback should still work.
+
+
+    The primary account's default device-lock setting and the secondary accounts' default PIN setting should be enforced when each account is initially configured.
+}}}}}
+
+
+[Document]: this screen will shown as coming soon
