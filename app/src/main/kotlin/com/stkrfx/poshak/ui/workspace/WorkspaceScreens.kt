@@ -40,7 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
@@ -50,10 +50,10 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -126,6 +126,14 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 private const val DEVELOPER_WHATSAPP = "918709782649"
+
+@Suppress("DEPRECATION")
+private fun createLegacyDeviceCredentialIntent(
+    keyguard: KeyguardManager,
+    title: CharSequence,
+    description: CharSequence,
+): Intent? = keyguard.createConfirmDeviceCredentialIntent(title, description)
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -261,7 +269,7 @@ fun AuthenticatedWorkspace(
         if (appLock == "DEVICE" && !appLockVerified) {
             val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
             if (keyguard.isDeviceSecure) {
-                val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                val intent = createLegacyDeviceCredentialIntent(keyguard, "Unlock Poshak", "Confirm your device screen lock")
                 if (intent != null) deviceLockLauncher.launch(intent) else deviceAuthUnavailable = true
             } else deviceAuthUnavailable = true
         }
@@ -345,7 +353,7 @@ fun AuthenticatedWorkspace(
             text = { Text("Set a screen lock in Android Settings, then reopen Poshak. Device lock cannot be replaced by your app PIN.") },
             confirmButton = { TextButton(onClick = {
                 val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
-                val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                val intent = createLegacyDeviceCredentialIntent(keyguard, "Unlock Poshak", "Confirm your device screen lock")
                 if (intent != null) { deviceAuthUnavailable = false; deviceLockLauncher.launch(intent) }
             }) { Text("Try again") } },
             dismissButton = { TextButton(onClick = onLogout) { Text("Log out") } },
@@ -647,7 +655,7 @@ fun AuthenticatedWorkspace(
                                 localPreferences.edit().putString("app_lock", it).putBoolean("app_lock_enabled", it != "NONE").apply()
                                 if (it == "DEVICE") {
                                     val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
-                                    val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                                    val intent = createLegacyDeviceCredentialIntent(keyguard, "Unlock Poshak", "Confirm your device screen lock")
                                     if (intent != null) deviceLockLauncher.launch(intent) else deviceAuthUnavailable = true
                                 }
                             }
