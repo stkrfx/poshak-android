@@ -3,6 +3,9 @@
 package com.stkrfx.poshak.ui.workspace
 
 import android.content.Intent
+import android.app.KeyguardManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -160,6 +163,8 @@ fun AuthenticatedWorkspace(
     var showNewPassword by rememberSaveable { mutableStateOf(false) }
     var showConfirmPassword by rememberSaveable { mutableStateOf(false) }
     var appLock by rememberSaveable { mutableStateOf(localPreferences.getString("app_lock", "DEVICE") ?: "DEVICE") }
+    var appLockVerified by rememberSaveable { mutableStateOf(false) }
+    var deviceAuthUnavailable by rememberSaveable { mutableStateOf(false) }
     var weekStartsMonday by rememberSaveable { mutableStateOf(localPreferences.getBoolean("week_starts_monday", true)) }
     var dobLocked by rememberSaveable { mutableStateOf(localPreferences.getBoolean("dob_locked", latestProfile.isDateOfBirthLocked)) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -170,7 +175,7 @@ fun AuthenticatedWorkspace(
     var pin by rememberSaveable { mutableStateOf("") }
     var confirmPin by rememberSaveable { mutableStateOf("") }
     var appPin by rememberSaveable { mutableStateOf(localVault.getString("app_pin").orEmpty()) }
-    var showAppUnlock by rememberSaveable { mutableStateOf(localVault.getString("app_pin").orEmpty().isNotBlank() && localPreferences.getBoolean("app_lock_enabled", true)) }
+    var showAppUnlock by rememberSaveable { mutableStateOf(localPreferences.getBoolean("app_lock_enabled", true) && localPreferences.getString("app_lock", "DEVICE") == "PIN" && localVault.getString("app_pin").orEmpty().isNotBlank()) }
     var unlockAttempt by rememberSaveable { mutableStateOf("") }
     var unlockError by rememberSaveable { mutableStateOf<String?>(null) }
     var salarySecretPin by rememberSaveable { mutableStateOf(localVault.getString("salary_pin").orEmpty()) }
@@ -200,6 +205,21 @@ fun AuthenticatedWorkspace(
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val deviceLockLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        appLockVerified = result.resultCode == android.app.Activity.RESULT_OK
+        deviceAuthUnavailable = !appLockVerified
+    }
+    androidx.compose.runtime.LaunchedEffect(appLock, appPin) {
+        showAppUnlock = appLock == "PIN" && appPin.length == 4
+        if (appLock == "DEVICE" && !appLockVerified) {
+            val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
+            if (keyguard.isDeviceSecure) {
+                val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                if (intent != null) deviceLockLauncher.launch(intent) else deviceAuthUnavailable = true
+            } else deviceAuthUnavailable = true
+        }
+        if (appLock == "NONE") { appLockVerified = true; showAppUnlock = false }
+    }
 
     BackHandler {
         when {
@@ -253,7 +273,20 @@ fun AuthenticatedWorkspace(
         localVault.putString("app_pin", appPin)
         localVault.putString("salary_pin", salarySecretPin)
     }
-    if (showAppUnlock) {
+    if (appLock == "DEVICE" && !appLockVerified && deviceAuthUnavailable) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Device lock unavailable") },
+            text = { Text("Set a screen lock in Android Settings, then reopen Poshak. Device lock cannot be replaced by your app PIN.") },
+            confirmButton = { TextButton(onClick = {
+                val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
+                val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                if (intent != null) { deviceAuthUnavailable = false; deviceLockLauncher.launch(intent) }
+            }) { Text("Try again") } },
+            dismissButton = { TextButton(onClick = onLogout) { Text("Log out") } },
+        )
+    }
+    if (showAppUnlock && appLock == "PIN") {
         AlertDialog(
             onDismissRequest = { },
             icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
@@ -529,7 +562,21 @@ fun AuthenticatedWorkspace(
                         currentMode = appLock,
                         isPrimary = true,
                         onBack = { profilePage = ProfilePage.SETTINGS },
-                        onSelect = { appLock = it; if (it == "PIN") { pin = ""; confirmPin = ""; profilePage = ProfilePage.SET_PIN } else scope.launch { snackbarHostState.showSnackbar("Lock preference updated for this UI preview.") } },
+                        onSelect = {
+                            appLock = it
+                            appLockVerified = false
+                            deviceAuthUnavailable = false
+                            if (it == "PIN") {
+                                pin = ""; confirmPin = ""; profilePage = ProfilePage.SET_PIN
+                            } else {
+                                localPreferences.edit().putString("app_lock", it).putBoolean("app_lock_enabled", it != "NONE").apply()
+                                if (it == "DEVICE") {
+                                    val keyguard = context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager
+                                    val intent = keyguard.createConfirmDeviceCredentialIntent("Unlock Poshak", "Confirm your device screen lock")
+                                    if (intent != null) deviceLockLauncher.launch(intent) else deviceAuthUnavailable = true
+                                }
+                            }
+                        },
                     )
                     ProfilePage.SET_PIN -> SetPinScreen(
                         pin = pin,
@@ -539,7 +586,7 @@ fun AuthenticatedWorkspace(
                         onPinChange = { pin = it; pinError = null },
                         onConfirmChange = { confirmPin = it; pinError = null },
                         onBack = { profilePage = ProfilePage.APP_LOCK },
-                        onSave = { if (pin.length != 4 || confirmPin.length != 4) pinError = "Enter a four-digit PIN in both fields." else if (pin != confirmPin) pinError = "The PINs do not match." else { appPin = pin; pin = ""; confirmPin = ""; pinError = null; profilePage = ProfilePage.SETTINGS; scope.launch { snackbarHostState.showSnackbar("App PIN set locally for this UI preview.") } } },
+                        onSave = { if (pin.length != 4 || confirmPin.length != 4) pinError = "Enter a four-digit PIN in both fields." else if (pin != confirmPin) pinError = "The PINs do not match." else { appPin = pin; appLock = "PIN"; appLockVerified = false; localPreferences.edit().putString("app_lock", "PIN").putBoolean("app_lock_enabled", true).apply(); pin = ""; confirmPin = ""; pinError = null; profilePage = ProfilePage.SETTINGS; scope.launch { snackbarHostState.showSnackbar("App PIN saved.") } } },
                     )
                     ProfilePage.SALARY_PIN -> SetPinScreen(
                         pin = pin,
