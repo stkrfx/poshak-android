@@ -39,6 +39,7 @@ import com.stkrfx.poshak.ui.auth.ForgotPasswordScreen
 import com.stkrfx.poshak.ui.auth.LoginScreen
 import com.stkrfx.poshak.ui.auth.ResetPasswordScreen
 import com.stkrfx.poshak.ui.home.HomeScreen
+import com.stkrfx.poshak.ui.security.SensitiveWindowProtection
 import com.stkrfx.poshak.ui.workspace.AuthenticatedWorkspace
 import kotlinx.coroutines.launch
 
@@ -46,6 +47,8 @@ import kotlinx.coroutines.launch
 fun PoshakApp(api: PoshakApi, themeMode: String, onThemeModeChanged: (String) -> Unit) {
     val backStack = rememberNavBackStack(StartupRoute)
     var profile by remember { mutableStateOf<EmployeeProfile?>(null) }
+    // Capture the last successful profile before startup validation can clear a revoked/blocked session cache.
+    val cachedSessionProfile = remember { api.loadCachedProfile() }
     var resetEmail by rememberSaveable { mutableStateOf("") }
     var resetOtp by rememberSaveable { mutableStateOf("") }
     var startupMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -54,6 +57,11 @@ fun PoshakApp(api: PoshakApi, themeMode: String, onThemeModeChanged: (String) ->
     var updateDownloadError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    // Authenticated screens and OTP/password-reset flows must never appear in Recents previews.
+    SensitiveWindowProtection(
+        enabled = backStack.lastOrNull() in setOf(ForgotPasswordRoute, EmailOtpRoute, ResetPasswordRoute),
+    )
 
     val requireUpdate: (AppRelease) -> Unit = { release ->
         requiredRelease = release
@@ -100,12 +108,32 @@ fun PoshakApp(api: PoshakApi, themeMode: String, onThemeModeChanged: (String) ->
                 backStack.add(LoginRoute)
             }
         } catch (exception: ApiException) {
-            if (exception.apiCode == "APP_UPDATE_REQUIRED" && exception.appRelease != null) {
-                requireUpdate(exception.appRelease)
-            } else {
-                startupMessage = exception.message
-                backStack.clear()
-                backStack.add(LoginRoute)
+            when {
+                exception.apiCode == "APP_UPDATE_REQUIRED" && exception.appRelease != null -> requireUpdate(exception.appRelease)
+                exception.apiCode == "ACCOUNT_BLOCKED" -> {
+                    val blockedProfile = exception.blockedProfile
+                        ?: cachedSessionProfile?.copy(
+                            isBlocked = true,
+                            blockedReason = exception.blockedReason ?: exception.message,
+                        )
+                    if (blockedProfile != null) {
+                        profile = blockedProfile.copy(
+                            isBlocked = true,
+                            blockedReason = exception.blockedReason ?: blockedProfile.blockedReason ?: exception.message,
+                        )
+                        backStack.clear()
+                        backStack.add(HomeRoute)
+                    } else {
+                        startupMessage = exception.message
+                        backStack.clear()
+                        backStack.add(LoginRoute)
+                    }
+                }
+                else -> {
+                    startupMessage = exception.message
+                    backStack.clear()
+                    backStack.add(LoginRoute)
+                }
             }
         } catch (_: Exception) {
             startupMessage = "Could not reconnect to Poshak. Please sign in again."

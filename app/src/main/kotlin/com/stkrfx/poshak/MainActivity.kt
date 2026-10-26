@@ -20,11 +20,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowInsetsControllerCompat
 import com.stkrfx.poshak.data.PoshakApi
+import com.stkrfx.poshak.widget.AttendanceWidgetScheduler
 import com.stkrfx.poshak.ui.theme.PoshakTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AttendanceWidgetScheduler.schedule(applicationContext)
 
         setContent {
             val context = LocalContext.current

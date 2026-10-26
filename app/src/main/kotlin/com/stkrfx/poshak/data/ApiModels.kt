@@ -70,4 +70,6 @@ class ApiException(
     val apiCode: String,
     override val message: String,
     val appRelease: AppRelease? = null,
+    val blockedReason: String? = null,
+    val blockedProfile: EmployeeProfile? = null,
 ) : Exception(message)
