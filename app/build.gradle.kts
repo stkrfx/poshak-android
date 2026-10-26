@@ -11,35 +11,47 @@ val configuredApiBaseUrl = providers.gradleProperty("POSHAK_API_BASE_URL")
 val appVersionCode = 2
 val appVersionName = "2.0.0"
 
-android {
-    namespace = "com.stkrfx.poshak"
-    compileSdk = 37
+    android {
+        namespace = "com.stkrfx.poshak"
+        compileSdk = 37
 
-    defaultConfig {
-        applicationId = "com.satyamfix.poshak"
+        signingConfigs {
+            create("release") {
+                storeFile = file("poshak.keystore")
+                storePassword = "satyam"
+                keyAlias = "poshak"
+                keyPassword = "satyam"
+            }
+        }  
+
+        defaultConfig {
+        applicationId = "com.satyamfix.poshak"  // keep same as old app for in-app updates
         minSdk = 24
         targetSdk = 37
-        versionCode = appVersionCode
-        versionName = appVersionName
+        versionCode = 2
+        versionName = "2.0.0"
         buildConfigField("String", "API_BASE_URL", "\"${configuredApiBaseUrl.trimEnd('/')}\"")
-        buildConfigField("int", "APP_VERSION_CODE", appVersionCode.toString())
+        buildConfigField("int", "APP_VERSION_CODE", "2")
         manifestPlaceholders["usesCleartextTraffic"] = "false"
+        resConfigs "en"
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
+         
     }
 
     buildTypes {
         debug {
-            // HTTP is permitted only for the development build to reach a local backend.
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
-            signingConfig = signingConfigs.getByName("release")
-            // Production builds must use HTTPS.
-            manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
-    }
+    }   
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -84,7 +96,7 @@ dependencies {
 
     // Compose UI and Material 3
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation(libs.androidx.compose.ui.tooling)
