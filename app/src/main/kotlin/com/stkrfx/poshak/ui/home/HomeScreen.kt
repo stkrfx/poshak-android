@@ -3,6 +3,7 @@ package com.stkrfx.poshak.ui.home
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -10,6 +11,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -103,12 +105,31 @@ fun HomeScreen(
     val snackbarHost = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
+    val widgetContext = androidx.compose.ui.platform.LocalContext.current
+
+    fun contextForWidgetUpdate(snapshot: AttendanceSnapshot, status: String) {
+        widgetContext.getSharedPreferences("poshak_widget_data", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("today_date", LocalDate.now().toString())
+            .putString("today_status", status)
+            .apply()
+        val manager = android.appwidget.AppWidgetManager.getInstance(widgetContext)
+        val component = android.content.ComponentName(widgetContext, com.stkrfx.poshak.widget.TodayAttendanceWidgetProvider::class.java)
+        val ids = manager.getAppWidgetIds(component)
+        if (ids.isNotEmpty()) manager.notifyAppWidgetViewDataChanged(ids, 0)
+        com.stkrfx.poshak.widget.TodayAttendanceWidgetProvider.updateAll(widgetContext)
+    }
+
     LaunchedEffect(refreshKey) {
         loading = true
         loadError = null
         try {
             val loaded = api.fetchAttendance()
             snapshot = loaded
+            val today = LocalDate.now()
+            val todayStatus = loaded.months.firstOrNull { it.yearMonth == YearMonth.from(today) }
+                ?.days?.firstOrNull { it.date == today }?.status ?: "UNMARKED"
+            contextForWidgetUpdate(loaded, todayStatus)
             val loadedSheetNames = loaded.months.map { it.sheetName }
             if (selectedSheetName == null || selectedSheetName !in loadedSheetNames) {
                 selectedSheetName = loaded.months.firstOrNull { it.yearMonth == YearMonth.now() }?.sheetName
@@ -169,13 +190,22 @@ fun HomeScreen(
                     }
                 }
 
-                if (monthPickerExpanded && currentSnapshot != null) {
+                val monthChipOffset by animateDpAsState(
+                    targetValue = if (monthPickerExpanded) 0.dp else (-8).dp,
+                    animationSpec = tween(220),
+                    label = "month-chip-offset",
+                )
+                AnimatedVisibility(
+                    visible = monthPickerExpanded && currentSnapshot != null,
+                    enter = fadeIn(tween(220)) + expandVertically(tween(220)),
+                    exit = fadeOut(tween(150)) + shrinkVertically(tween(180)),
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().offset(y = monthChipOffset),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        currentSnapshot.months.sortedBy { it.yearMonth }.takeLast(3).forEach { month ->
+                        currentSnapshot?.months?.sortedBy { it.yearMonth }?.takeLast(3)?.forEach { month ->
                             val isSelected = month.sheetName == selectedSheetName
                             FilterChip(
                                 selected = isSelected,
