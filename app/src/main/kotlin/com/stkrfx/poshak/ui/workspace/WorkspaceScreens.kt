@@ -221,7 +221,7 @@ fun AuthenticatedWorkspace(
         if (appLock == "NONE") { appLockVerified = true; showAppUnlock = false }
     }
 
-    BackHandler {
+    BackHandler(enabled = showSwitchOrLogout || confirmLogout || showDeviceOtp || showSalaryDialog || showSalaryUnlock || themeExpanded || profilePage != ProfilePage.OVERVIEW || selectedTab != MainTab.HOME) {
         when {
             showSwitchOrLogout -> showSwitchOrLogout = false
             confirmLogout -> confirmLogout = false

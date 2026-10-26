@@ -1,8 +1,8 @@
 package com.stkrfx.poshak.ui.home
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -10,9 +10,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -258,21 +255,28 @@ fun HomeScreen(
                         Spacer(Modifier.height(10.dp))
                     }
                 }
-                AnimatedContent(
-                    targetState = selectedMonth.sheetName,
+                val orderedMonths = currentSnapshot.months.sortedBy { it.yearMonth }
+                val initialPage = (orderedMonths.indexOfFirst { it.sheetName == selectedMonth.sheetName }).coerceAtLeast(0)
+                val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { orderedMonths.size })
+                androidx.compose.runtime.LaunchedEffect(selectedSheetName, orderedMonths) {
+                    val wanted = orderedMonths.indexOfFirst { it.sheetName == selectedSheetName }
+                    if (wanted >= 0 && pagerState.currentPage != wanted) pagerState.animateScrollToPage(wanted)
+                }
+                androidx.compose.runtime.LaunchedEffect(pagerState.currentPage, orderedMonths) {
+                    orderedMonths.getOrNull(pagerState.currentPage)?.let { pageMonth ->
+                        if (pageMonth.sheetName != selectedSheetName) selectedSheetName = pageMonth.sheetName
+                    }
+                }
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier.weight(1f),
-                    transitionSpec = {
-                        (slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(220)))
-                            .togetherWith(slideOutHorizontally(tween(220)) { -it / 5 } + fadeOut(tween(180)))
-                            .using(SizeTransform(clip = false))
-                    },
-                    label = "attendance-month-transition",
-                ) { monthName ->
-                    val animatedMonth = currentSnapshot.months.firstOrNull { it.sheetName == monthName } ?: selectedMonth
+                    key = { page -> orderedMonths[page].sheetName },
+                    beyondViewportPageCount = 1,
+                ) { page ->
                     CalendarGrid(
                         modifier = Modifier.fillMaxSize(),
-                        selectedMonth = animatedMonth,
-                        allMonths = currentSnapshot.months,
+                        selectedMonth = orderedMonths[page],
+                        allMonths = orderedMonths,
                         onSelectMonth = { selectedSheetName = it },
                         onShowNote = { note -> coroutineScope.launch { snackbarHost.showSnackbar(note) } },
                         weekStartsMonday = weekStartsMonday,
@@ -375,9 +379,12 @@ private fun CalendarGrid(
                                 Text(
                                     text = date.dayOfMonth.toString(),
                                     color = when {
-                                        !isInVisibleMonth && !canNavigateToMonth -> Color(0xFF666666).copy(alpha = 0.62f)
-                                        !isInVisibleMonth -> Color(0xFF555555).copy(alpha = 0.82f)
-                                        else -> Color(0xFF171717)
+                                        date == today -> MaterialTheme.colorScheme.onPrimary
+                                        status == "P" || status == "PRESENT" || status == "A" || status == "ABSENT" || status == "HD" || status == "HALF_DAY" || status == "HALFDAY" ->
+                                            if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF151515) else Color(0xFF151515)
+                                        !isInVisibleMonth && !canNavigateToMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f)
+                                        !isInVisibleMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+                                        else -> MaterialTheme.colorScheme.onSurface
                                     },
                                     style = MaterialTheme.typography.labelLarge,
                                 )
