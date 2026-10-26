@@ -7,6 +7,10 @@ import android.app.KeyguardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -632,7 +636,7 @@ private fun ProfileOverviewScreen(
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface).combinedClickable(onClick = onAvatar, onLongClick = onAvatar), contentAlignment = Alignment.Center) {
-                    Text(avatar.ifBlank { displayName.firstOrNull()?.uppercase() ?: "P" }, style = MaterialTheme.typography.headlineLarge)
+                    AvatarContent(avatar, displayName, Modifier.size(76.dp), MaterialTheme.typography.headlineLarge)
                 }
                 Column(Modifier.weight(1f)) {
                     Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -806,7 +810,7 @@ private fun SwitchAccountScreen(accounts: List<LocalAccount>, onBack: () -> Unit
 private fun AvatarEditorScreen(currentAvatar: String, onBack: () -> Unit, onChoose: (String) -> Unit, onUpload: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         PageHeader("Profile picture", "Choose an avatar or use a photo", onBack)
-        Box(Modifier.size(130.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Text(currentAvatar.ifBlank { "P" }, style = MaterialTheme.typography.displayMedium) }
+        Box(Modifier.size(130.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { AvatarContent(currentAvatar, "P", Modifier.fillMaxSize(), MaterialTheme.typography.displayMedium) }
         Text("Preview", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("🌿", "🌸", "🌞", "🪷").forEach { symbol -> AssistChip(onClick = { onChoose(symbol) }, label = { Text(symbol, style = MaterialTheme.typography.titleLarge) }) } }
@@ -940,7 +944,33 @@ private fun SectionTitle(title: String) { Text(title, style = MaterialTheme.typo
 
 @Composable
 private fun AvatarMark(avatar: String, label: String) {
-    Box(Modifier.size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Text(avatar.ifBlank { label.firstOrNull()?.uppercase() ?: "P" }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+    Box(Modifier.size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+        AvatarContent(avatar, label, Modifier.fillMaxSize(), MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun AvatarContent(value: String, fallbackLabel: String, modifier: Modifier, textStyle: androidx.compose.ui.text.TextStyle) {
+    val bitmap = androidx.compose.runtime.remember(value) {
+        runCatching {
+            if (!value.startsWith("data:image/", ignoreCase = true)) null
+            else {
+                val comma = value.indexOf(',')
+                if (comma < 0) null else {
+                    val metadata = value.substring(0, comma)
+                    val payload = value.substring(comma + 1)
+                    val bytes = if (metadata.contains(";base64", ignoreCase = true)) Base64.decode(payload, Base64.DEFAULT) else java.net.URLDecoder.decode(payload, Charsets.UTF_8.name()).toByteArray(Charsets.ISO_8859_1)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                }
+            }
+        }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap, contentDescription = "Profile picture", modifier = modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+    } else {
+        val fallback = fallbackLabel.firstOrNull()?.uppercase() ?: "P"
+        Text(value.takeIf { it.isNotBlank() && !it.startsWith("data:image/") && !it.startsWith("http://") && !it.startsWith("https://") } ?: fallback, modifier = modifier, style = textStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+    }
 }
 
 @Composable
