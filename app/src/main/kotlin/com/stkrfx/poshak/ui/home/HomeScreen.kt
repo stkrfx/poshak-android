@@ -10,19 +10,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -132,7 +133,11 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            Text(if (monthPickerExpanded) "⌃" else "⌄", modifier = Modifier.padding(start = 4.dp))
+                            Icon(
+                                imageVector = if (monthPickerExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                contentDescription = if (monthPickerExpanded) "Hide months" else "Choose month",
+                                modifier = Modifier.padding(start = 2.dp),
+                            )
                         }
                     }
                     IconButton(onClick = { showSummary = !showSummary }) {
@@ -162,7 +167,8 @@ fun HomeScreen(
                     ) {
                         currentSnapshot.months.sortedByDescending { it.yearMonth }.take(3).forEach { month ->
                             val isSelected = month.sheetName == selectedSheetName
-                            AssistChip(
+                            FilterChip(
+                                selected = isSelected,
                                 onClick = {
                                     selectedSheetName = month.sheetName
                                     monthPickerExpanded = false
@@ -195,7 +201,6 @@ fun HomeScreen(
                 Text(loadError ?: "Attendance is unavailable.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(14.dp))
                 TextButton(onClick = { refreshKey++ }) { Text("Try again") }
-                TextButton(onClick = onLogout) { Text("Sign out") }
             }
 
             selectedMonth == null -> Column(
@@ -208,7 +213,7 @@ fun HomeScreen(
             }
 
             else -> Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 12.dp),
             ) {
                 if (loadError != null) {
                     Text(loadError.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp))
@@ -218,6 +223,7 @@ fun HomeScreen(
                     Spacer(Modifier.height(10.dp))
                 }
                 CalendarGrid(
+                    modifier = Modifier.weight(1f),
                     selectedMonth = selectedMonth,
                     allMonths = currentSnapshot.months,
                     onSelectMonth = { selectedSheetName = it },
@@ -227,9 +233,8 @@ fun HomeScreen(
                     },
                     weekStartsMonday = weekStartsMonday,
                 )
-                Spacer(Modifier.height(16.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     StatusLegend("Present", PRESENT)
@@ -237,14 +242,6 @@ fun HomeScreen(
                     StatusLegend("Half-day", HALF_DAY)
                     StatusLegend("Unmarked", UNMARKED)
                 }
-                Spacer(Modifier.height(18.dp))
-                TextButton(
-                    onClick = {
-                        // Logout revokes the server session when reachable and always clears local credentials.
-                        onLogout()
-                    },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) { Text("Sign out") }
             }
         }
     }
@@ -252,6 +249,7 @@ fun HomeScreen(
 
 @Composable
 private fun CalendarGrid(
+    modifier: Modifier = Modifier,
     selectedMonth: AttendanceMonth,
     allMonths: List<AttendanceMonth>,
     onSelectMonth: (String) -> Unit,
@@ -265,7 +263,8 @@ private fun CalendarGrid(
     val daysByDate = allMonths.flatMap { it.days }.associateBy { it.date }
     val today = LocalDate.now()
 
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Column(modifier = modifier) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         (0..6).forEach { index ->
             val weekday = if (weekStartsMonday) DayOfWeek.of(index + 1) else if (index == 0) DayOfWeek.SUNDAY else DayOfWeek.of(index)
             Text(
@@ -280,7 +279,7 @@ private fun CalendarGrid(
     }
 
     repeat(6) { weekIndex ->
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
             repeat(7) { dayIndex ->
                 val date = firstCellDate.plusDays((weekIndex * 7 + dayIndex).toLong())
                 val record = daysByDate[date]
@@ -292,7 +291,7 @@ private fun CalendarGrid(
                     modifier = Modifier
                         .weight(1f)
                         .padding(2.dp)
-                        .height(44.dp)
+                        .fillMaxHeight()
                         .clip(RoundedCornerShape(12.dp))
                         .background(backgroundColor)
                         .clickable {
@@ -333,6 +332,7 @@ private fun CalendarGrid(
                 }
             }
         }
+    }
     }
 }
 
@@ -382,7 +382,7 @@ private fun statusColor(status: String, isToday: Boolean): Color = when (status.
 }
 
 private fun fullMonthName(yearMonth: YearMonth): String =
-    "${yearMonth.month.getDisplayName(JavaTextStyle.FULL, Locale.ENGLISH)} ${yearMonth.year}"
+    yearMonth.month.getDisplayName(JavaTextStyle.FULL, Locale.ENGLISH)
 
 private val PRESENT = Color(0xFFD5F5E3)
 private val ABSENT = Color(0xFFFADBD8)

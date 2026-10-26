@@ -4,6 +4,7 @@ package com.stkrfx.poshak.ui.workspace
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -133,17 +134,20 @@ fun AuthenticatedWorkspace(
     onLogout: () -> Unit,
     onForceUpdate: (com.stkrfx.poshak.data.AppRelease) -> Unit,
 ) {
+    val context = LocalContext.current
+    val localPreferences = remember { context.getSharedPreferences("poshak_local_data", android.content.Context.MODE_PRIVATE) }
+    val localVault = remember { com.stkrfx.poshak.data.LocalDeviceVault(context) }
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.OVERVIEW) }
     var showSwitchOrLogout by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var showBlockedDialog by remember { mutableStateOf(profile.isBlocked) }
     var profileName by rememberSaveable { mutableStateOf(profile.name) }
-    var username by rememberSaveable { mutableStateOf(profile.username) }
-    var email by rememberSaveable { mutableStateOf(profile.email.orEmpty()) }
-    var address by rememberSaveable { mutableStateOf(profile.address.orEmpty()) }
-    var dob by rememberSaveable { mutableStateOf(profile.dateOfBirth.orEmpty()) }
-    var avatar by rememberSaveable { mutableStateOf(profile.avatarUrl.orEmpty()) }
+    var username by rememberSaveable { mutableStateOf(localPreferences.getString("profile_username", profile.username) ?: profile.username) }
+    var email by rememberSaveable { mutableStateOf(localPreferences.getString("profile_email", profile.email.orEmpty()) ?: profile.email.orEmpty()) }
+    var address by rememberSaveable { mutableStateOf(localPreferences.getString("profile_address", profile.address.orEmpty()) ?: profile.address.orEmpty()) }
+    var dob by rememberSaveable { mutableStateOf(localPreferences.getString("profile_dob", profile.dateOfBirth.orEmpty()) ?: profile.dateOfBirth.orEmpty()) }
+    var avatar by rememberSaveable { mutableStateOf(localPreferences.getString("profile_avatar", profile.avatarUrl.orEmpty()) ?: profile.avatarUrl.orEmpty()) }
     var emailPending by rememberSaveable { mutableStateOf("") }
     var profileError by rememberSaveable { mutableStateOf<String?>(null) }
     var profileSaved by rememberSaveable { mutableStateOf(false) }
@@ -153,9 +157,9 @@ fun AuthenticatedWorkspace(
     var showCurrentPassword by rememberSaveable { mutableStateOf(false) }
     var showNewPassword by rememberSaveable { mutableStateOf(false) }
     var showConfirmPassword by rememberSaveable { mutableStateOf(false) }
-    var appLock by rememberSaveable { mutableStateOf(if (profilePage == ProfilePage.SET_PIN) "PIN" else "DEVICE") }
-    var weekStartsMonday by rememberSaveable { mutableStateOf(true) }
-    var dobLocked by rememberSaveable { mutableStateOf(profile.isDateOfBirthLocked) }
+    var appLock by rememberSaveable { mutableStateOf(localPreferences.getString("app_lock", "DEVICE") ?: "DEVICE") }
+    var weekStartsMonday by rememberSaveable { mutableStateOf(localPreferences.getBoolean("week_starts_monday", true)) }
+    var dobLocked by rememberSaveable { mutableStateOf(localPreferences.getBoolean("dob_locked", profile.isDateOfBirthLocked)) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showAvatarActions by remember { mutableStateOf(false) }
     var showDeviceOtp by remember { mutableStateOf(false) }
@@ -163,12 +167,12 @@ fun AuthenticatedWorkspace(
     var otp by rememberSaveable { mutableStateOf("") }
     var pin by rememberSaveable { mutableStateOf("") }
     var confirmPin by rememberSaveable { mutableStateOf("") }
-    var appPin by rememberSaveable { mutableStateOf("") }
-    var salarySecretPin by rememberSaveable { mutableStateOf("") }
+    var appPin by rememberSaveable { mutableStateOf(localVault.getString("app_pin").orEmpty()) }
+    var salarySecretPin by rememberSaveable { mutableStateOf(localVault.getString("salary_pin").orEmpty()) }
     var salaryPin by rememberSaveable { mutableStateOf("") }
-    var salary by rememberSaveable { mutableStateOf("") }
+    var salary by rememberSaveable { mutableStateOf(localPreferences.getString("monthly_salary", "").orEmpty()) }
     var salaryVisible by rememberSaveable { mutableStateOf(false) }
-    var salaryPinConfigured by rememberSaveable { mutableStateOf(false) }
+    var salaryPinConfigured by rememberSaveable { mutableStateOf(localPreferences.getBoolean("salary_pin_configured", false)) }
     var showSalaryDialog by remember { mutableStateOf(false) }
     var showSalaryUnlock by remember { mutableStateOf(false) }
     var salaryError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -189,9 +193,49 @@ fun AuthenticatedWorkspace(
             LocalDevice("Other device", "Last active 3 days ago"),
         )
     }
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    var showExitConfirmation by rememberSaveable { mutableStateOf(false) }
+    BackHandler {
+        when {
+            showExitConfirmation -> showExitConfirmation = false
+            showSwitchOrLogout -> showSwitchOrLogout = false
+            confirmLogout -> confirmLogout = false
+            showDeviceOtp -> showDeviceOtp = false
+            showSalaryDialog -> showSalaryDialog = false
+            showSalaryUnlock -> showSalaryUnlock = false
+            themeExpanded -> themeExpanded = false
+            profilePage != ProfilePage.OVERVIEW -> profilePage = ProfilePage.OVERVIEW
+            selectedTab != MainTab.HOME -> selectedTab = MainTab.HOME
+            else -> showExitConfirmation = true
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(appLock, appPin, weekStartsMonday, dobLocked, salary, salarySecretPin, salaryPinConfigured, username, email, address, dob, avatar) {
+        localPreferences.edit()
+            .putString("app_lock", appLock)
+            .putBoolean("week_starts_monday", weekStartsMonday)
+            .putBoolean("dob_locked", dobLocked)
+            .putString("monthly_salary", salary)
+            .putBoolean("salary_pin_configured", salaryPinConfigured)
+            .putString("profile_username", username)
+            .putString("profile_email", email)
+            .putString("profile_address", address)
+            .putString("profile_dob", dob)
+            .putString("profile_avatar", avatar)
+            .apply()
+        localVault.putString("app_pin", appPin)
+        localVault.putString("salary_pin", salarySecretPin)
+    }
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Exit Poshak?") },
+            text = { Text("Your local settings and salary will remain saved on this device.") },
+            confirmButton = { TextButton(onClick = { showExitConfirmation = false; (context as? android.app.Activity)?.finish() }) { Text("Exit") } },
+            dismissButton = { TextButton(onClick = { showExitConfirmation = false }) { Text("Stay") } },
+        )
+    }
 
     if (showBlockedDialog) {
         AlertDialog(
